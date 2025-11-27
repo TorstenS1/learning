@@ -189,6 +189,34 @@ const App = () => {
         }
     };
 
+    const startTestGeneration = async () => {
+        if (!state.currentConcept) {
+            updateState({ llmOutput: 'Fehler: Kein aktives Konzept für Test-Generierung gefunden.' });
+            return;
+        }
+        updateState({ loading: true, llmOutput: 'Test-Generierung läuft... Kurator wird kontaktiert...' });
+
+        try {
+            const result = await alisAPI.generateTest(
+                state.userId,
+                state.goalId,
+                state.currentConcept,
+                state.userProfile
+            );
+
+            updateState({
+                loading: false,
+                llmOutput: result.data.llm_output, // Die generierten Testfragen
+            });
+            setPhase('P6_TEST_PHASE'); // Neue Phase für die Testanzeige
+        } catch (error) {
+            updateState({
+                loading: false,
+                llmOutput: `Fehler beim Generieren der Tests: ${error.message}`
+            });
+        }
+    };
+
     // ==============================================================================
     // 4. RENDERING DER PHASEN
     // ==============================================================================
@@ -202,11 +230,11 @@ const App = () => {
                 </h2>
 
                 {/* Material-Content-Box */}
-                <div className="p-6 bg-gray-50 border border-gray-200 rounded-xl shadow-inner min-h-[300px]">
+                <div className="p-6 bg-gray-50 text-blue-600 border border-gray-200 rounded-xl shadow-inner min-h-[300px]">
                     {state.loading ? (
                         <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-indigo-500" /></div>
                     ) : (
-                        <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: state.llmOutput.replace(/\n/g, '<br/>') }} />
+                        <div className="prose max-w-none " dangerouslySetInnerHTML={{ __html: state.llmOutput.replace(/\n/g, '<br/>') }} />
                     )}
                 </div>
 
@@ -219,15 +247,17 @@ const App = () => {
                         Fundament fehlt / Lücke melden (P5.5)
                     </button>
                     <button
-                        onClick={() => updateState({ llmOutput: 'Test-Generierung wird simuliert...' })}
-                        className="flex items-center px-4 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition duration-150 shadow-md">
+                        onClick={startTestGeneration} // Geänderter onClick Handler
+                        className="flex items-center px-4 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition duration-150 shadow-md"
+                        disabled={state.loading}
+                    >
                         Konzept verstanden (P6 starten) <ArrowRight className="w-4 h-4 ml-2" />
                     </button>
                 </div>
             </div>
 
             {/* Rechte Seite: Tutor Chat */}
-            <div className="w-full lg:w-1/4 p-4 border-l border-gray-200 bg-gray-50 rounded-r-xl flex flex-col">
+            <div className="w-full lg:w-1/4 p-4 border-l border-gray-200 bg-gray-50 text-gray-700 rounded-r-xl flex flex-col">
                 <h3 className="text-lg font-semibold mb-3 flex items-center text-gray-700">
                     <MessageCircle className="mr-2 w-5 h-5" /> Tutor Chat
                 </h3>
@@ -306,7 +336,7 @@ const App = () => {
                 {state.pathStructure.map((concept, index) => (
                     <li key={concept.id} className={`flex items-center justify-between p-4 rounded-lg transition duration-150 ${concept.status === 'Aktiv' ? 'bg-indigo-100 border-l-4 border-indigo-600 font-semibold' :
                         concept.status === 'Übersprungen' ? 'bg-green-50 line-through text-gray-500' :
-                            'bg-gray-50 border border-gray-200'
+                            'bg-gray-50 border border-gray-200 text-gray-500'
                         }`}>
                         <span className="flex items-center">
                             {index + 1}. {concept.name}
@@ -339,6 +369,31 @@ const App = () => {
         </div>
     );
 
+    const renderTestUI = () => (
+        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
+            <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
+                <Zap className="mr-3 w-7 h-7" /> Test (P6)
+            </h1>
+            <p className="text-gray-600 mb-6">
+                Der **Kurator** hat Testfragen für das Konzept "{state.currentConcept?.name}" generiert.
+            </p>
+            <div className="p-6 bg-gray-50 text-blue-600 border border-gray-200 rounded-xl shadow-inner min-h-[300px]">
+                {state.loading ? (
+                    <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-indigo-500" /></div>
+                ) : (
+                    <div className="prose max-w-none " dangerouslySetInnerHTML={{ __html: state.llmOutput.replace(/\n/g, '<br/>') }} />
+                )}
+            </div>
+            {/* Hier könnten später Eingabefelder für Antworten und ein "Test abschließen" Button folgen */}
+            <button
+                onClick={() => { /* Logik für Test abschicken/bewerten */ alert('Test abschicken (Funktionalität noch nicht implementiert)'); }}
+                className="w-full mt-6 flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
+            >
+                Test abschließen & bewerten
+            </button>
+        </div>
+    );
+
     // ==============================================================================
     // 5. HAUPT-LAYOUT UND SWITCH
     // ==============================================================================
@@ -348,6 +403,7 @@ const App = () => {
             {phase === 'P1_GOAL_SETTING' && renderGoalSettingUI()}
             {phase === 'P3_PATH_REVIEW' && renderPathReviewUI()}
             {phase === 'P5_LEARNING' && renderLearningUI()}
+            {phase === 'P6_TEST_PHASE' && renderTestUI()}
         </div>
     );
 };

@@ -4,6 +4,7 @@ Each function represents a specific agent action in the learning pipeline.
 """
 import json
 import time
+import re
 from typing import Dict, Any
 
 from backend.models.state import ALISState
@@ -54,6 +55,40 @@ def create_goal_path(state: ALISState) -> ALISState:
             },
         ]
         state['current_concept'] = state['path_structure'][1]
+    else:
+        # Parse JSON output from LLM
+        try:
+            # Extract JSON from code blocks if present
+            json_match = re.search(r"```json\s*(.*?)\s*```", llm_result, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = llm_result
+
+            parsed_result = json.loads(json_str)
+            
+            state['path_structure'] = parsed_result.get('path_structure', [])
+            
+            # Find the first open concept
+            for concept in state['path_structure']:
+                if concept.get('status') == 'Offen':
+                    state['current_concept'] = concept
+                    break
+            
+            # Fallback if no open concept found or path is empty
+            if not state.get('current_concept') and state['path_structure']:
+                 state['current_concept'] = state['path_structure'][0]
+                 
+        except Exception as e:
+            print(f"Error parsing LLM output: {e}")
+            # Fallback to a safe default to prevent crash
+            state['path_structure'] = [{
+                "id": "K1-Fallback",
+                "name": state['user_input'],
+                "status": "Offen",
+                "requiredBloomLevel": 1
+            }]
+            state['current_concept'] = state['path_structure'][0]
     
     # Log the goal creation
     logging_service.create_log_entry(

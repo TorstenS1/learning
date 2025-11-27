@@ -65,3 +65,4 @@ dist/
 *.pyc
 *.pyo
 learning/
+/frontend/package-lock.json

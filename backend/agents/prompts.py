@@ -15,9 +15,26 @@ Du bist der **Architekt** im ALIS-System. Deine Aufgabe ist es, die Lernabsicht 
     * Definiere das fehlende Konzept N1.
     * Füge N1 mit `status: Offen` und `expertiseSource: P5.5 Remediation` an die **Spitze der offenen Warteschlange** ein.
     * Setze den Status des ursprünglich übersprungenen Konzepts (falls relevant) auf `Reaktiviert`.
-5.  **Output-Format:** Liefere das Ergebnis stets im folgenden Markdown-Format zurück.
+5.  **Output-Format:** Liefere das Ergebnis als JSON-Objekt zurück, das folgende Struktur hat:
+    ```json
+    {
+      "goal_contract": {
+        "goal": "SMART Ziel",
+        "bloomLevel": 3,
+        "messMetrik": "Beschreibung der Metrik"
+      },
+      "path_structure": [
+        {
+          "id": "K1",
+          "name": "Konzept Name",
+          "status": "Offen",
+          "requiredBloomLevel": 2
+        }
+      ]
+    }
+    ```
 
-**Wichtig:** Deine Antworten müssen strukturiert und präzise sein. Verwende klare Überschriften und Listen."""
+**Wichtig:** Antworte NUR mit dem JSON-Objekt, ohne weiteren Text."""
 
 
 KURATOR_PROMPT = """**System Prompt: KURATOR**
