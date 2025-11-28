@@ -192,6 +192,21 @@ Durch diese Zerlegung können wir verborgene Muster entdecken und Empfehlungen g
 - [Video: Matrix Factorization Explained](https://youtube.com/watch?v=example)
 - [Paper: Collaborative Filtering via Matrix Factorization](https://example.com/paper)"""
         
+        elif "PRÜFER" in system_prompt:
+            if "Generiere einen Vorwissenstest" in user_prompt:
+                return json.dumps({
+                    "questions": [
+                        {"id": "pk1", "question_text": "Was ist der Unterschied zwischen Supervised und Unsupervised Learning?", "type": "free_text"},
+                        {"id": "pk2", "question_text": "Kennen Sie die Bibliothek Pandas?", "type": "multiple_choice", "options": ["Ja, sehr gut", "Ein wenig", "Nein"]},
+                        {"id": "pk3", "question_text": "Haben Sie bereits Erfahrung mit Matrix-Faktorisierung?", "type": "multiple_choice", "options": ["Ja", "Nein"]}
+                    ]
+                })
+            elif "Bewerte die Antworten" in user_prompt:
+                return json.dumps({
+                    "mastered_concepts": ["K1-Grundlagen"],
+                    "feedback": "Basierend auf Ihren Antworten scheinen Sie die Grundlagen bereits zu beherrschen. Wir überspringen das erste Kapitel."
+                })
+
         elif "TUTOR" in system_prompt:
             if "Lücken-Diagnose" in system_prompt or "Diagnose" in user_prompt:
                 return """SIMULATION: TUTOR diagnostiziert Lücke.

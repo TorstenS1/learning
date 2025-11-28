@@ -168,6 +168,30 @@ export const alisAPI = {
             userAnswers,
             pathStructure
         });
+    },
+
+    /**
+     * P2: Generate prior knowledge test
+     */
+    async generatePriorKnowledgeTest(userId, goalId, pathStructure) {
+        return apiCall('/generate_prior_knowledge_test', {
+            userId,
+            goalId,
+            pathStructure
+        });
+    },
+
+    /**
+     * P2: Evaluate prior knowledge test
+     */
+    async evaluatePriorKnowledgeTest(userId, goalId, pathStructure, testQuestions, userAnswers) {
+        return apiCall('/evaluate_prior_knowledge_test', {
+            userId,
+            goalId,
+            pathStructure,
+            testQuestions,
+            userAnswers
+        });
     }
 };
 

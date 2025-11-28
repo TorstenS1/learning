@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Zap, LayoutList, BookOpen, MessageCircle, AlertTriangle, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, Zap, LayoutList, BookOpen, MessageCircle, AlertTriangle, ArrowRight, CheckCircle, XCircle, BrainCircuit } from 'lucide-react';
 import alisAPI from './services/alisAPI';
 
 // ==============================================================================
@@ -13,6 +13,7 @@ import alisAPI from './services/alisAPI';
 const App = () => {
     const [phase, setPhase] = useState('P1_GOAL_SETTING');
     const [goalInput, setGoalInput] = useState('');
+    const [pretest, setPretest] = useState(true);
     const [state, setState] = useState({
         userId: 'ALIS-User-ID-12345',
         goalId: null,
@@ -60,28 +61,41 @@ const App = () => {
 
     // Helper to parse LLM output for test questions
     useEffect(() => {
-        if (phase === 'P6_TEST_PHASE' && state.llmOutput) {
+        if ((phase === 'P6_TEST_PHASE' || phase === 'P2_PRIOR_KNOWLEDGE') && state.llmOutput) {
+            console.log("Parsing questions for phase:", phase);
+            console.log("LLM Output to parse:", state.llmOutput);
             try {
                 // Assuming llmOutput is a JSON string with a 'test_questions' key
                 const parsed = JSON.parse(state.llmOutput);
+                console.log("Parsed JSON:", parsed);
+
+                // Handle P2 format (questions array directly or inside 'questions' key) vs P6 format (test_questions)
+                let questions = [];
                 if (parsed.test_questions && Array.isArray(parsed.test_questions)) {
-                    updateState({ parsedTestQuestions: parsed.test_questions });
+                    questions = parsed.test_questions;
+                } else if (parsed.questions && Array.isArray(parsed.questions)) {
+                    questions = parsed.questions;
+                }
+
+                if (questions.length > 0) {
+                    console.log("Found questions:", questions);
+                    updateState({ parsedTestQuestions: questions });
                     // Initialize userTestAnswers
                     const initialAnswers = {};
-                    parsed.test_questions.forEach((q, index) => {
+                    questions.forEach((q, index) => {
                         initialAnswers[q.id || `q${index}`] = q.type === 'multiple_choice' ? '' : '';
                     });
                     updateState({ userTestAnswers: initialAnswers });
                 } else {
-                    console.warn("LLM output for test questions did not contain 'test_questions' array:", parsed);
+                    console.warn("LLM output did not contain valid questions array:", parsed);
                     updateState({ parsedTestQuestions: [] });
                 }
             } catch (e) {
                 console.error("Error parsing test questions LLM output:", e);
                 updateState({ parsedTestQuestions: [] });
             }
-        } else if (phase !== 'P6_TEST_PHASE' && !phase.startsWith('P7_')) {
-            // Clear test-related states when leaving P6 (but keep them for P7 evaluation display)
+        } else if (phase !== 'P6_TEST_PHASE' && phase !== 'P2_PRIOR_KNOWLEDGE' && !phase.startsWith('P7_')) {
+            // Clear test-related states when leaving P6 or P2 (but keep them for P7 evaluation display)
             if (state.parsedTestQuestions.length > 0 || Object.keys(state.userTestAnswers).length > 0) {
                 // Don't clear testEvaluationResult here, as it might be needed for P7
                 updateState({ parsedTestQuestions: [], userTestAnswers: {} });
@@ -114,14 +128,27 @@ const App = () => {
                 state.userProfile
             );
 
-            updateState({
-                loading: false,
+            const goalData = {
                 goalId: result.data.goalId || 'G-TEMP-001',
                 llmOutput: result.data.llm_output,
                 pathStructure: result.data.path_structure,
                 currentConcept: result.data.current_concept,
+            };
+
+            // Update state with the goal data
+            updateState({
+                loading: false, // Will be set to true again by startPriorKnowledgeTest if pretest is true
+                ...goalData
             });
-            setPhase('P3_PATH_REVIEW');
+
+            // Decide next phase based on 'pretest' setting
+            if (pretest) {
+                // Directly initiate prior knowledge test
+                await startPriorKnowledgeTest(goalData.goalId, goalData.pathStructure);
+            } else {
+                // Go directly to the path review, skipping the choice screen
+                setPhase('P3_PATH_REVIEW');
+            }
         } catch (error) {
             updateState({
                 loading: false,
@@ -350,6 +377,53 @@ const App = () => {
         }
     };
 
+    const startPriorKnowledgeTest = async (goalIdFromParam, pathStructureFromParam) => {
+        const goalIdToUse = goalIdFromParam || state.goalId;
+        const pathStructureToUse = pathStructureFromParam || state.pathStructure;
+
+        console.log("Starting P2 test generation...");
+        updateState({ loading: true, llmOutput: 'Prüfer generiert Vorwissenstest...' });
+        try {
+            const result = await alisAPI.generatePriorKnowledgeTest(
+                state.userId,
+                goalIdToUse,
+                pathStructureToUse
+            );
+            console.log("P2 API Result:", result);
+            updateState({
+                loading: false,
+                llmOutput: result.llm_output // Contains test questions JSON
+            });
+            console.log("Setting phase to P2_PRIOR_KNOWLEDGE");
+            setPhase('P2_PRIOR_KNOWLEDGE');
+        } catch (error) {
+            console.error("Error in startPriorKnowledgeTest:", error);
+            updateState({ loading: false, llmOutput: 'Fehler bei P2 Generierung' });
+        }
+    };
+
+    const submitPriorKnowledgeTest = async () => {
+        updateState({ loading: true, llmOutput: 'Prüfer bewertet Vorwissen...' });
+        try {
+            const result = await alisAPI.evaluatePriorKnowledgeTest(
+                state.userId,
+                state.goalId,
+                state.pathStructure,
+                state.parsedTestQuestions,
+                state.userTestAnswers
+            );
+            updateState({
+                loading: false,
+                llmOutput: result.llm_output, // Feedback
+                pathStructure: result.path_structure // Updated with skipped concepts
+            });
+            setPhase('P3_PATH_REVIEW');
+        } catch (error) {
+            console.error(error);
+            updateState({ loading: false, llmOutput: 'Fehler bei P2 Bewertung' });
+        }
+    };
+
 
     // ==============================================================================
     // 4. RENDERING DER PHASEN
@@ -436,11 +510,23 @@ const App = () => {
                 Definieren Sie Ihr Lernziel. Der **Architekt** standardisiert es in einen messbaren **SMART-Vertrag**.
             </p>
             <textarea
-                className="w-full p-4 border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[150px]"
+                className="w-full p-4 border-2 border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[150px] text-gray-900 bg-white"
                 placeholder="Beispiel: Ich möchte Multi-Agenten-Systeme in der Logistik implementieren."
                 value={goalInput}
                 onChange={(e) => setGoalInput(e.target.value)}
             />
+            <div className="mt-4 flex items-center justify-center">
+                <input
+                    type="checkbox"
+                    id="pretest-toggle"
+                    checked={pretest}
+                    onChange={(e) => setPretest(e.target.checked)}
+                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <label htmlFor="pretest-toggle" className="ml-2 block text-sm text-gray-700">
+                    Vorwissenstest zu Beginn durchführen
+                </label>
+            </div>
             <button
                 onClick={startGoalSetting}
                 className="w-full mt-4 flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-400"
@@ -456,6 +542,64 @@ const App = () => {
             )}
         </div>
     );
+
+    const renderPriorKnowledgeTestUI = () => {
+        console.log("Rendering P2 UI. Questions:", state.parsedTestQuestions);
+        return (
+            <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
+                <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
+                    <BrainCircuit className="mr-3 w-7 h-7" /> Vorwissenstest (P2)
+                </h1>
+                <p className="text-gray-600 mb-6">
+                    Bitte beantworten Sie die folgenden Fragen, damit wir Ihren Lernpfad anpassen können.
+                </p>
+
+                <div className="space-y-6">
+                    {state.parsedTestQuestions.map((question, index) => (
+                        <div key={question.id || index} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                            <p className="font-semibold text-lg mb-3 text-gray-800">
+                                {index + 1}. {question.question_text}
+                            </p>
+                            {question.type === 'multiple_choice' ? (
+                                <div className="space-y-2">
+                                    {question.options.map((option, optIndex) => (
+                                        <label key={optIndex} className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-100 rounded">
+                                            <input
+                                                type="radio"
+                                                name={question.id}
+                                                value={option}
+                                                checked={state.userTestAnswers[question.id] === option}
+                                                onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                                className="form-radio h-5 w-5 text-indigo-600"
+                                            />
+                                            <span className="text-gray-700">{option}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <textarea
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                                    rows="3"
+                                    placeholder="Ihre Antwort..."
+                                    value={state.userTestAnswers[question.id] || ''}
+                                    onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                />
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                <button
+                    onClick={submitPriorKnowledgeTest}
+                    className="w-full mt-8 flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-400"
+                    disabled={state.loading}
+                >
+                    {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <CheckCircle className="mr-2 w-5 h-5" />}
+                    Test einreichen & Pfad anpassen
+                </button>
+            </div>
+        );
+    };
 
     const renderPathReviewUI = () => (
         <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
@@ -799,6 +943,7 @@ const App = () => {
     return (
         <div className="min-h-screen bg-gray-100 font-sans p-4">
             {phase === 'P1_GOAL_SETTING' && renderGoalSettingUI()}
+            {phase === 'P2_PRIOR_KNOWLEDGE' && renderPriorKnowledgeTestUI()}
             {phase === 'P3_PATH_REVIEW' && renderPathReviewUI()}
             {phase === 'P5_LEARNING' && renderLearningUI()}
             {phase === 'P6_TEST_PHASE' && renderTestUI()}

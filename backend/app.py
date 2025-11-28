@@ -122,16 +122,15 @@ def start_goal():
         initial_state = create_initial_state(payload)
         
         # Run workflow from P1_P3_Goal_Path_Creation
-        final_state = run_workflow_step(initial_state, "P1_P3_Goal_Path_Creation")
+        final_state_output = run_workflow_step(initial_state, "P1_P3_Goal_Path_Creation")
         
         # Extract the final state from the last node output
-        if final_state:
-            # LangGraph returns dict with node names as keys
-            # Get the last node's output
-            last_node_key = list(final_state.keys())[-1] if final_state else None
-            result_state = final_state[last_node_key] if last_node_key else initial_state
+        if final_state_output:
+            # LangGraph returns dict with node names as keys in stream output
+            # We need the ALISState itself from the last step
+            result_state = ALISState(**final_state_output[list(final_state_output.keys())[-1]])
         else:
-            result_state = initial_state
+            result_state = initial_state # Fallback
         
         return jsonify({
             'status': 'success',
@@ -181,17 +180,20 @@ def get_material():
         
         initial_state = create_initial_state(payload)
         
-        # Call the node directly instead of running the workflow
-        # This prevents automatic progression through all phases
-        from backend.agents.nodes import generate_material
-        result_state = generate_material(initial_state)
+        # Run workflow from P4_Material_Generation
+        final_state_output = run_workflow_step(initial_state, "P4_Material_Generation")
+
+        if final_state_output:
+            result_state = ALISState(**final_state_output[list(final_state_output.keys())[-1]])
+        else:
+            result_state = initial_state
         
         return jsonify({
             'status': 'success',
             'data': {
                 'llm_output': result_state.get('llm_output'),
-                'path_structure': result_state.get('path_structure'),
-                'current_concept': result_state.get('current_concept')
+                'path_structure': result_state.get('path_structure'), # Path might be updated by P5_5
+                'current_concept': result_state.get('current_concept') # Current concept might change after remediation
             }
         }), 200
         
@@ -230,9 +232,13 @@ def chat():
         
         initial_state = create_initial_state(payload)
         
-        # Call the node directly
-        from backend.agents.nodes import process_chat
-        result_state = process_chat(initial_state)
+        # Run workflow from P5_Chat_Tutor
+        final_state_output = run_workflow_step(initial_state, "P5_Chat_Tutor")
+
+        if final_state_output:
+            result_state = ALISState(**final_state_output[list(final_state_output.keys())[-1]])
+        else:
+            result_state = initial_state
         
         return jsonify({
             'status': 'success',
@@ -276,9 +282,13 @@ def diagnose_luecke():
         
         initial_state = create_initial_state(payload)
         
-        # Call the node directly
-        from backend.agents.nodes import start_remediation_diagnosis
-        result_state = start_remediation_diagnosis(initial_state)
+        # Run workflow from P5_5_Diagnosis
+        final_state_output = run_workflow_step(initial_state, "P5_5_Diagnosis")
+
+        if final_state_output:
+            result_state = ALISState(**final_state_output[list(final_state_output.keys())[-1]])
+        else:
+            result_state = initial_state
         
         return jsonify({
             'status': 'success',
@@ -457,6 +467,78 @@ def submit_test():
             'status': 'error',
             'message': f'Internal server error: {str(e)}'
         }), 500
+
+        return jsonify({
+            'status': 'error',
+            'message': f'Internal server error: {str(e)}'
+        }), 500
+
+
+@app.route('/api/generate_prior_knowledge_test', methods=['POST'])
+def generate_prior_knowledge_test_endpoint():
+    """
+    P2: Generate prior knowledge assessment questions.
+    """
+    try:
+        payload = request.get_json()
+        if not payload or 'goalId' not in payload or 'pathStructure' not in payload:
+            return jsonify({'status': 'error', 'message': 'Missing goalId or pathStructure'}), 400
+            
+        initial_state = ALISState(
+            user_id=payload.get('userId', 'anonymous_user'),
+            goal_id=payload.get('goalId'),
+            path_structure=payload.get('pathStructure', []),
+            current_concept={},
+            llm_output="",
+            user_input="",
+            remediation_needed=False,
+            user_profile=payload.get('userProfile', {})
+        )
+        
+        from backend.agents.nodes import generate_prior_knowledge_test
+        result_state = generate_prior_knowledge_test(initial_state)
+        
+        return jsonify({
+            'status': 'success',
+            'llm_output': result_state.get('llm_output')
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Error in generate_prior_knowledge_test: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/evaluate_prior_knowledge_test', methods=['POST'])
+def evaluate_prior_knowledge_test_endpoint():
+    """
+    P2: Evaluate prior knowledge and update path.
+    """
+    try:
+        payload = request.get_json()
+        if not payload or 'testQuestions' not in payload or 'userAnswers' not in payload:
+            return jsonify({'status': 'error', 'message': 'Missing test data'}), 400
+            
+        initial_state = ALISState(
+            user_id=payload.get('userId', 'anonymous_user'),
+            goal_id=payload.get('goalId'),
+            path_structure=payload.get('pathStructure', []),
+            current_concept={},
+            llm_output=json.dumps({"test_questions": payload.get('testQuestions')}),
+            user_input=json.dumps(payload.get('userAnswers')),
+            remediation_needed=False,
+            user_profile=payload.get('userProfile', {})
+        )
+        
+        from backend.agents.nodes import evaluate_prior_knowledge_test
+        result_state = evaluate_prior_knowledge_test(initial_state)
+        
+        return jsonify({
+            'status': 'success',
+            'llm_output': result_state.get('llm_output'),
+            'path_structure': result_state.get('path_structure')
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Error in evaluate_prior_knowledge_test: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.errorhandler(404)

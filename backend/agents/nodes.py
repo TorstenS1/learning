@@ -9,7 +9,7 @@ from typing import Dict, Any
 from bson.objectid import ObjectId # Import ObjectId for MongoDB _id handling
 
 from backend.models.state import ALISState, Goal, UserProfile, ConceptDict
-from backend.agents.prompts import ARCHITEKT_PROMPT, KURATOR_PROMPT, TUTOR_PROMPT
+from backend.agents.prompts import ARCHITEKT_PROMPT, KURATOR_PROMPT, TUTOR_PROMPT, PRUEFER_PROMPT
 from backend.services.llm_service import get_llm_service
 from backend.services.db_service import get_db_service
 from backend.services.logging_service import logging_service
@@ -508,4 +508,87 @@ def evaluate_test(state: ALISState) -> ALISState:
     # This state key will be used by the workflow to decide next steps (P7 logic)
     state['test_passed'] = passed 
 
+    return state
+    return state
+
+
+def generate_prior_knowledge_test(state: ALISState) -> ALISState:
+    """
+    P2: Pruefer generates prior knowledge assessment questions.
+    """
+    llm = get_llm_service()
+    path_structure = state.get('path_structure', [])
+    
+    # Extract goal topic from path or goal ID (if we had the goal object)
+    # For now, we use the path structure as context
+    path_summary = json.dumps([c['name'] for c in path_structure], ensure_ascii=False)
+    
+    prompt = (
+        f"Generiere einen Vorwissenstest für folgenden Lernpfad: {path_summary}. "
+        f"Erstelle 3-5 Fragen, um zu prüfen, welche dieser Konzepte der Nutzer schon beherrscht. "
+        f"Antworte als JSON mit einem 'questions' Array (id, question_text, type)."
+    )
+    
+    response = llm.call(PRUEFER_PROMPT, prompt)
+    
+    # Parse response
+    try:
+        data = json.loads(response)
+        questions = data.get('questions', [])
+    except Exception as e:
+        print(f"Error parsing prior knowledge questions: {e}")
+        questions = []
+        
+    state['llm_output'] = json.dumps({'test_questions': questions})
+    return state
+
+
+def evaluate_prior_knowledge_test(state: ALISState) -> ALISState:
+    """
+    P2: Pruefer evaluates prior knowledge and updates path structure.
+    """
+    llm = get_llm_service()
+    db = get_db_service()
+    goal_id = state['goal_id']
+    path_structure = state.get('path_structure', [])
+    
+    # Parse inputs
+    try:
+        original_questions = json.loads(state['llm_output']).get('test_questions', [])
+        user_answers = json.loads(state['user_input'])
+    except Exception as e:
+        print(f"Error parsing inputs for P2 evaluation: {e}")
+        return state
+        
+    prompt = (
+        f"Bewerte die Antworten für den Vorwissenstest.\n"
+        f"Fragen: {json.dumps(original_questions, ensure_ascii=False)}\n"
+        f"Antworten: {json.dumps(user_answers, ensure_ascii=False)}\n"
+        f"Lernpfad: {json.dumps(path_structure, ensure_ascii=False)}\n"
+        f"Identifiziere Konzepte, die der Nutzer bereits beherrscht. "
+        f"Antworte als JSON mit 'mastered_concepts' (Liste von Konzept-IDs) und 'feedback'."
+    )
+    
+    response = llm.call(PRUEFER_PROMPT, prompt)
+    
+    try:
+        data = json.loads(response)
+        mastered_ids = data.get('mastered_concepts', [])
+        feedback = data.get('feedback', "")
+        
+        # Update path structure
+        for concept in path_structure:
+            if concept['id'] in mastered_ids:
+                concept['status'] = 'Übersprungen'
+                concept['expertiseSource'] = 'P2 Vorwissen'
+                # Update DB
+                if goal_id:
+                    db.update_concept_status(goal_id, concept['id'], 'Übersprungen')
+                    
+        state['llm_output'] = feedback
+        state['path_structure'] = path_structure
+        
+    except Exception as e:
+        print(f"Error evaluating prior knowledge: {e}")
+        
     return state
