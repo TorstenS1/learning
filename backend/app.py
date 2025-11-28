@@ -28,7 +28,7 @@ CORS(app, resources={
 })
 
 # Initialize services
-llm_service = get_llm_service(use_simulation=True)
+llm_service = get_llm_service(use_simulation=False)
 db_service = get_db_service()
 workflow = get_workflow()
 
