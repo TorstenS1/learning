@@ -194,6 +194,42 @@ export const alisAPI = {
             testQuestions,
             userAnswers
         });
+    },
+
+    /**
+     * Session Management: Save current session
+     * @param {string} userId - User identifier
+     * @param {object} sessionData - Current application state
+     * @param {string} sessionName - Optional custom name for the session
+     */
+    async saveSession(userId, sessionData, sessionName = null) {
+        return apiCall('/save_session', {
+            userId,
+            sessionData,
+            sessionName
+        });
+    },
+
+    /**
+     * Session Management: Load saved session
+     * @param {string} userId - User identifier
+     * @param {string} goalId - Optional goal ID to load specific session
+     */
+    async loadSession(userId, goalId = null) {
+        return apiCall('/load_session', {
+            userId,
+            goalId
+        });
+    },
+
+    /**
+     * Session Management: List all sessions for user
+     * @param {string} userId - User identifier
+     */
+    async listSessions(userId) {
+        return apiCall('/list_sessions', {
+            userId
+        });
     }
 };
 

@@ -90,6 +90,23 @@ export const de = {
         correctAnswer: "Richtige Antwort:"
     },
 
+    // Session Management
+    session: {
+        saveBtn: "Speichern",
+        loadBtn: "Laden",
+        save: "Fortschritt speichern",
+        load: "Fortschritt laden",
+        saved: "Fortschritt erfolgreich gespeichert! ✅",
+        loaded: "Session erfolgreich geladen! 📂",
+        saveFailed: "Fehler beim Speichern",
+        noSession: "Keine gespeicherten Sessions gefunden",
+        noGoal: "Bitte erstellen Sie zuerst ein Lernziel",
+        savePrompt: "Geben Sie einen Namen für diese Session ein:",
+        selectPrompt: "Wählen Sie eine Session zum Laden:\n\n",
+        enterNumber: "Nummer eingeben (1-",
+        invalidChoice: "Ungültige Auswahl"
+    },
+
     // Common
     common: {
         loading: "Lädt...",

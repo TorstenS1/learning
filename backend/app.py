@@ -565,6 +565,152 @@ def internal_error(error):
     }), 500
 
 
+@app.route('/api/save_session', methods=['POST'])
+def save_session():
+    """
+    Save current learning session.
+    
+    Expected payload:
+        {
+            "userId": str,
+            "sessionData": dict (current app state)
+        }
+    
+    Returns:
+        JSON with session ID
+    """
+    try:
+        from backend.services.session_service import get_session_manager
+        
+        payload = request.get_json()
+        
+        if not payload or 'userId' not in payload or 'sessionData' not in payload:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing required fields: userId, sessionData'
+            }), 400
+        
+        session_manager = get_session_manager()
+        session_id = session_manager.save_session(
+            payload['userId'],
+            payload['sessionData'],
+            payload.get('sessionName')  # Optional custom name
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'sessionId': session_id,
+                'message': 'Session saved successfully'
+            }
+        }), 200
+        
+    except Exception as error:
+        app.logger.error(f"Error in save_session: {str(error)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': str(error)
+        }), 500
+
+
+@app.route('/api/load_session', methods=['POST'])
+def load_session():
+    """
+    Load saved learning session.
+    
+    Expected payload:
+        {
+            "userId": str,
+            "goalId": str (optional)
+        }
+    
+    Returns:
+        JSON with session data
+    """
+    try:
+        from backend.services.session_service import get_session_manager
+        
+        payload = request.get_json()
+        
+        if not payload or 'userId' not in payload:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing required field: userId'
+            }), 400
+        
+        session_manager = get_session_manager()
+        session_data = session_manager.load_session(
+            payload['userId'],
+            payload.get('goalId')
+        )
+        
+        if session_data:
+            return jsonify({
+                'status': 'success',
+                'data': session_data
+            }), 200
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'No session found'
+            }), 404
+        
+    except Exception as error:
+        app.logger.error(f"Error in load_session: {str(error)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': str(error)
+        }), 500
+
+
+@app.route('/api/list_sessions', methods=['POST'])
+def list_sessions():
+    """
+    List all sessions for a user.
+    
+    Expected payload:
+        {
+            "userId": str
+        }
+    
+    Returns:
+        JSON with list of sessions
+    """
+    try:
+        from backend.services.session_service import get_session_manager
+        
+        payload = request.get_json()
+        
+        if not payload or 'userId' not in payload:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing required field: userId'
+            }), 400
+        
+        session_manager = get_session_manager()
+        sessions = session_manager.list_sessions(payload['userId'])
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'sessions': sessions
+            }
+        }), 200
+        
+    except Exception as error:
+        app.logger.error(f"Error in list_sessions: {str(error)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': str(error)
+        }), 500
+
+
+# Error handlers
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("🚀 ALIS Backend Server Starting...")

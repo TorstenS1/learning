@@ -278,6 +278,149 @@ const App = () => {
     };
 
     // ==============================================================================
+    // SESSION MANAGEMENT
+    // ==============================================================================
+
+    const autoSaveSession = async () => {
+        if (!state.goalId) return; // Only save if goal exists
+
+        try {
+            // Auto-generate session name from first concept or goal ID
+            const autoSessionName = state.pathStructure?.[0]?.name || state.goalId || 'Auto-saved Session';
+
+            await alisAPI.saveSession(state.userId, {
+                phase,
+                goalId: state.goalId,
+                goalName: autoSessionName,
+                pathStructure: state.pathStructure,
+                currentConcept: state.currentConcept,
+                llmOutput: state.llmOutput,
+                tutorChat: state.tutorChat,
+                testEvaluationResult: state.testEvaluationResult,
+                parsedTestQuestions: state.parsedTestQuestions,
+                userTestAnswers: state.userTestAnswers,
+                remediationNeeded: state.remediationNeeded,
+                language
+            }, autoSessionName);
+            console.log('✅ Session auto-saved:', autoSessionName);
+        } catch (error) {
+            console.error('❌ Auto-save failed:', error);
+        }
+    };
+
+    const handleSaveSession = async () => {
+        if (!state.goalId) {
+            alert(t.session?.noGoal || 'Please create a learning goal first');
+            return;
+        }
+
+        // Prompt for session name
+        const goalName = state.pathStructure?.[0]?.name || state.goalId;
+        const sessionName = prompt(
+            t.session?.savePrompt || 'Enter a name for this session:',
+            goalName
+        );
+
+        if (sessionName === null) return; // User cancelled
+
+        updateState({ loading: true });
+        try {
+            await alisAPI.saveSession(state.userId, {
+                phase,
+                goalId: state.goalId,
+                goalName: sessionName,
+                pathStructure: state.pathStructure,
+                currentConcept: state.currentConcept,
+                llmOutput: state.llmOutput,
+                tutorChat: state.tutorChat,
+                testEvaluationResult: state.testEvaluationResult,
+                parsedTestQuestions: state.parsedTestQuestions,
+                userTestAnswers: state.userTestAnswers,
+                remediationNeeded: state.remediationNeeded,
+                language
+            }, sessionName);
+            updateState({ loading: false });
+            alert(t.session?.saved || 'Progress saved successfully! ✅');
+        } catch (error) {
+            updateState({ loading: false });
+            alert(t.session?.saveFailed || 'Failed to save progress');
+        }
+    };
+
+    const handleLoadSession = async () => {
+        updateState({ loading: true });
+        try {
+            // Get list of sessions
+            console.log('🔍 Fetching sessions for user:', state.userId);
+            const listResult = await alisAPI.listSessions(state.userId);
+            console.log('📋 List result:', listResult);
+            updateState({ loading: false });
+
+            if (listResult.status === 'success' && listResult.data.sessions.length > 0) {
+                const sessions = listResult.data.sessions;
+                console.log('✅ Found sessions:', sessions.length);
+
+                // Create selection dialog
+                let message = t.session?.selectPrompt || 'Select a session to load:\n\n';
+                sessions.forEach((session, index) => {
+                    const date = new Date(session.timestamp).toLocaleString();
+                    message += `${index + 1}. ${session.session_name || session.goal_name}\n`;
+                    message += `   Phase: ${session.phase} | ${date}\n`;
+                    message += `   Current: ${session.current_concept}\n\n`;
+                });
+
+                const choice = prompt(message + (t.session?.enterNumber || 'Enter number (1-' + sessions.length + '):'));
+
+                if (choice === null) return; // User cancelled
+
+                const selectedIndex = parseInt(choice) - 1;
+                if (selectedIndex >= 0 && selectedIndex < sessions.length) {
+                    const selectedSession = sessions[selectedIndex];
+
+                    // Load the selected session
+                    updateState({ loading: true });
+                    const result = await alisAPI.loadSession(state.userId, selectedSession.goal_id);
+
+                    if (result.status === 'success') {
+                        const session = result.data;
+                        setPhase(session.phase || 'P1_GOAL_SETTING');
+                        updateState({
+                            loading: false,
+                            goalId: session.goal_id,
+                            pathStructure: session.path_structure || [],
+                            currentConcept: session.current_concept,
+                            llmOutput: session.llm_output || '',
+                            tutorChat: session.tutor_chat || [],
+                            testEvaluationResult: session.test_evaluation_result,
+                            parsedTestQuestions: session.parsed_test_questions || [],
+                            userTestAnswers: session.user_test_answers || {},
+                            remediationNeeded: session.remediation_needed || false
+                        });
+                        setLanguage(session.language || 'de');
+                        alert(t.session?.loaded || 'Session loaded successfully! 📂');
+                    }
+                } else {
+                    alert(t.session?.invalidChoice || 'Invalid selection');
+                }
+            } else {
+                console.log('❌ No sessions found or error:', listResult);
+                alert(t.session?.noSession || 'No saved sessions found');
+            }
+        } catch (error) {
+            console.error('❌ Load session error:', error);
+            updateState({ loading: false });
+            alert(t.session?.noSession || 'No saved sessions found');
+        }
+    };
+
+    // Auto-save on important actions
+    useEffect(() => {
+        if (state.goalId && (phase === 'P3_PATH_REVIEW' || phase === 'P5_LEARNING' || phase === 'P7_GOAL_COMPLETE')) {
+            autoSaveSession();
+        }
+    }, [phase, state.goalId]);
+
+    // ==============================================================================
     // 4. PHASE RENDERERS
     // ==============================================================================
 
@@ -624,8 +767,23 @@ const App = () => {
 
     return (
         <div className="min-h-screen bg-gray-100 font-sans p-4">
-            {/* Language Switcher */}
-            <div className="fixed top-4 right-4 z-50">
+            {/* Session Management & Language Switcher */}
+            <div className="fixed top-4 right-4 z-50 flex gap-2">
+                <button
+                    onClick={handleLoadSession}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-all flex items-center gap-1"
+                    title={t.session?.load || "Load saved progress"}
+                >
+                    📂 {t.session?.loadBtn || "Load"}
+                </button>
+                <button
+                    onClick={handleSaveSession}
+                    className="px-3 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition-all flex items-center gap-1 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    disabled={!state.goalId}
+                    title={t.session?.save || "Save current progress"}
+                >
+                    💾 {t.session?.saveBtn || "Save"}
+                </button>
                 <select
                     value={language}
                     onChange={(e) => changeLanguage(e.target.value)}
