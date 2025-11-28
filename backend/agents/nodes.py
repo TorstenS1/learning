@@ -103,8 +103,13 @@ def generate_material(state: ALISState) -> ALISState:
     user_prompt = (
         f"[ACTION: GENERATE_MATERIAL] "
         f"Generate learning material for the concept: '{concept_name}'. "
-        f"Use the following user context: {json.dumps(user_profile, ensure_ascii=False)}"
+        f"Use the following user context: {json.dumps(user_profile, ensure_ascii=False)}. "
     )
+    
+    # Add context from previous failed test if available (Remediation Loop)
+    if state.get('test_evaluation_result') and not state['test_evaluation_result'].get('passed', True):
+        feedback = state['test_evaluation_result'].get('feedback', '')
+        user_prompt += f"The user previously failed a test on this concept. Feedback was: '{feedback}'. Please adapt the material to address these gaps."
     llm_result = llm.call(CURATOR_PROMPT, user_prompt, use_grounding=True)
     state['llm_output'] = llm_result
     
@@ -291,9 +296,9 @@ def evaluate_test(state: ALISState) -> ALISState:
         f"Based on the concept's Bloom's level requirement ({current_concept.get('requiredBloomLevel', 3)}):\n"
         f"1. Provide a score (0-100).\n"
         f"2. Decide if the user passed (passed: true/false). Passing is >70%."
-        f"3. Provide brief feedback on performance."
-        f"4. Recommend next steps (Proceed or Repeat)."
-        f"ALWAYS respond in JSON format with keys: 'score', 'passed', 'feedback', 'recommendation', 'question_results'."
+        f"3. Provide constructive and motivational feedback. If failed, be encouraging and suggest specific areas to review.\n"
+        f"4. Recommend next steps (Proceed, Repeat, or check prerequisites)."
+        f"ALWAYS respond in JSON format with keys: 'score', 'passed', 'feedback', 'recommendation', 'question_results' (list of {{id, correct, explanation}})."
     )
     
     llm_evaluation_result = llm.call(CURATOR_PROMPT, evaluation_prompt)
@@ -325,13 +330,20 @@ def evaluate_test(state: ALISState) -> ALISState:
         
     user_profile['lastTestScore'] = score
     
+    # Calculate Cognitive Discrepancy (simplified)
+    # High discrepancy if user failed but expected to pass (e.g. high previous scores) - here just based on fail
+    kognitive_diskrepanz = "High" if not passed else "Low"
+    
+    # Emotion Feedback (could be analyzed from user answers if they were text, here simplified)
+    emotion_feedback = "Frustration" if not passed else "Satisfaction"
+
     logging_service.create_log_entry(
         eventType="P6_Test_Evaluation",
         conceptId=current_concept['id'],
         textContent=f"Questions: {json.dumps(original_test_questions)}, Answers: {json.dumps(user_answers)}",
         testScore=score,
-        kognitiveDiskrepanz="High" if not passed else "Low",
-        emotionFeedback="Neutral"
+        kognitiveDiskrepanz=kognitive_diskrepanz,
+        emotionFeedback=emotion_feedback
     )
 
     state['llm_output'] = feedback

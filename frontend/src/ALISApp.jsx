@@ -65,18 +65,21 @@ const App = () => {
     useEffect(() => {
         if ((phase === 'P6_TEST_PHASE' || phase === 'P2_PRIOR_KNOWLEDGE') && state.llmOutput) {
             try {
-                const parsed = JSON.parse(state.llmOutput);
-                let questions = parsed.test_questions || parsed.questions || [];
+                // Only attempt to parse if it looks like JSON
+                if (typeof state.llmOutput === 'string' && state.llmOutput.trim().startsWith('{')) {
+                    const parsed = JSON.parse(state.llmOutput);
+                    let questions = parsed.test_questions || parsed.questions || [];
 
-                if (questions.length > 0) {
-                    updateState({ parsedTestQuestions: questions });
-                    const initialAnswers = {};
-                    questions.forEach((q, index) => {
-                        initialAnswers[q.id || `q${index}`] = q.type === 'multiple_choice' ? '' : '';
-                    });
-                    updateState({ userTestAnswers: initialAnswers });
-                } else {
-                    updateState({ parsedTestQuestions: [] });
+                    if (questions.length > 0) {
+                        updateState({ parsedTestQuestions: questions });
+                        const initialAnswers = {};
+                        questions.forEach((q, index) => {
+                            initialAnswers[q.id || `q${index}`] = q.type === 'multiple_choice' ? '' : '';
+                        });
+                        updateState({ userTestAnswers: initialAnswers });
+                    } else {
+                        updateState({ parsedTestQuestions: [] });
+                    }
                 }
             } catch (e) {
                 console.error("Error parsing test questions LLM output:", e);
@@ -224,25 +227,36 @@ const App = () => {
         }
         updateState({ loading: true, llmOutput: `{ "test_questions": ${JSON.stringify(state.parsedTestQuestions)} }` });
         try {
+            console.log('🚀 Submitting test...');
             const result = await alisAPI.submitTest(state.userId, state.goalId, state.currentConcept, state.parsedTestQuestions, state.userTestAnswers, state.pathStructure);
+            console.log('✅ Test result received:', result);
+
             updateState({
                 loading: false,
                 llmOutput: result.data.llm_output,
-                testEvaluationResult: result.data.evaluation_result,
+                testEvaluationResult: result.data.evaluation_result, // Use the modified result
                 pathStructure: result.data.path_structure,
                 currentConcept: result.data.current_concept,
             });
 
-            if (result.data.evaluation_result?.passed) {
+            const passed = result.data.evaluation_result?.passed;
+            console.log('🤔 Test passed?', passed);
+            console.log('🤔 Next concept?', result.data.current_concept);
+
+            if (passed) {
                 if (result.data.current_concept) {
+                    console.log('➡️ Transitioning to P7_PROGRESSION');
                     setPhase('P7_PROGRESSION');
                 } else {
+                    console.log('➡️ Transitioning to P7_GOAL_COMPLETE');
                     setPhase('P7_GOAL_COMPLETE');
                 }
             } else {
+                console.log('➡️ Transitioning to P7_REMEDIATION_CHOICE');
                 setPhase('P7_REMEDIATION_CHOICE');
             }
         } catch (error) {
+            console.error('❌ Error evaluating test:', error);
             updateState({ loading: false, llmOutput: `Error evaluating test: ${error.message}` });
         }
     };
@@ -756,9 +770,37 @@ const App = () => {
                         <AlertTriangle className="mr-2 w-5 h-5" />
                         Report Prerequisite Gap (P5.5)
                     </button>
+                    <button onClick={async () => {
+                        if (confirm(t.p7.remediation.skipConcept + '?')) {
+                            // Mark as skipped and move to next
+                            const nextConcept = state.pathStructure.find((c, i) => i > state.pathStructure.findIndex(pc => pc.id === state.currentConcept.id) && (c.status === 'Open' || c.status === 'Reactivated'));
+
+                            if (nextConcept) {
+                                updateState({ loading: true, llmOutput: 'Skipping concept... Generating material for next concept...' });
+                                try {
+                                    const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile);
+                                    updateState({
+                                        loading: false,
+                                        llmOutput: result.data.llm_output,
+                                        currentConcept: nextConcept,
+                                        tutorChat: [{ sender: 'System', message: `Concept skipped. Welcome to: ${nextConcept.name}!` }],
+                                        testEvaluationResult: null
+                                    });
+                                    setPhase('P5_LEARNING');
+                                } catch (error) {
+                                    updateState({ loading: false, llmOutput: `Error: ${error.message}` });
+                                }
+                            } else {
+                                setPhase('P7_GOAL_COMPLETE');
+                            }
+                        }
+                    }} className="w-full flex items-center justify-center p-4 bg-gray-500 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-600 transition duration-150">
+                        <ArrowRight className="mr-2 w-5 h-5" />
+                        {t.p7.remediation.skipConcept}
+                    </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 
     // ==============================================================================

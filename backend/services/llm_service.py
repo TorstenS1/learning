@@ -123,11 +123,27 @@ class LLMService:
         
         elif "CURATOR" in system_prompt or "KURATOR" in system_prompt:
             if "[ACTION: EVALUATE_TEST]" in user_prompt: # Simulate test evaluation
+                import random
+                passed = random.choice([True, False])
+                score = random.randint(75, 100) if passed else random.randint(30, 65)
+                
+                feedback = (
+                    "Sehr gut! Sie haben das Konzept verstanden und die Fragen korrekt beantwortet." 
+                    if passed else 
+                    "Sie haben das Konzept noch nicht vollständig durchdrungen. Es gibt Lücken im Verständnis der Kernprinzipien."
+                )
+                
+                recommendation = (
+                    "Fahren Sie mit dem nächsten Konzept fort." 
+                    if passed else 
+                    "Wir empfehlen, das Lernmaterial zu wiederholen oder die Lückenanalyse (P5.5) zu nutzen."
+                )
+                
                 return json.dumps({
-                    "score": 85,
-                    "passed": True,
-                    "feedback": "Sehr gut! Sie haben das Konzept verstanden und die Fragen korrekt beantwortet.",
-                    "recommendation": "Fahren Sie mit dem nächsten Konzept fort.",
+                    "score": score,
+                    "passed": passed,
+                    "feedback": feedback,
+                    "recommendation": recommendation,
                     "question_results": [
                         {
                             "id": "q1",
@@ -142,8 +158,8 @@ class LLMService:
                             "question_text": "Erklären Sie, warum Matrix-Faktorisierung bei dünn besetzten Matrizen effizienter ist als direkte Ähnlichkeitsberechnungen.",
                             "user_answer": "Weil sie Dimensionen reduziert.",
                             "correct_answer": "N/A (Freitext)",
-                            "is_correct": True,
-                            "explanation": "Korrekt, durch die Zerlegung in latente Faktoren wird die Dimensionalität reduziert und die Dünnbesetztheit umgangen."
+                            "is_correct": passed, # Dependent on pass/fail
+                            "explanation": "Korrekt, durch die Zerlegung in latente Faktoren wird die Dimensionalität reduziert." if passed else "Nicht ganz. Der Hauptvorteil liegt in der Handhabung latenter Faktoren."
                         },
                         {
                             "id": "q3",
@@ -151,7 +167,7 @@ class LLMService:
                             "user_answer": "SVD",
                             "correct_answer": "ALS (Alternating Least Squares)",
                             "is_correct": False,
-                            "explanation": "Bei explizitem Feedback ist SVD gut, aber bei großen, dünnen Matrizen ist ALS oft skalierbarer und parallelisierbar."
+                            "explanation": "Bei explizitem Feedback ist SVD gut, aber bei großen, dünnen Matrizen ist ALS oft skalierbarer."
                         }
                     ]
                 })
