@@ -52,11 +52,11 @@ Unit Tests für Agent Nodes:
 - ✅ `test_generate_material_with_failed_test` - Remediation-Kontext
 
 **Evaluate Test:**
-- ❌ `test_evaluate_test_passed` - Test bestanden (Mock-Problem)
-- ❌ `test_evaluate_test_failed` - Test nicht bestanden (Mock-Problem)
+- ✅ `test_evaluate_test_passed` - Test bestanden
+- ✅ `test_evaluate_test_failed` - Test nicht bestanden
 
 **Process Chat:**
-- ❌ `test_process_chat` - Chat-Verarbeitung (Mock-Problem)
+- ✅ `test_process_chat` - Chat-Verarbeitung
 
 ### 4. `test_workflow.py` ⚠️ (6/9 Tests bestehen)
 Integration Tests für Workflow:

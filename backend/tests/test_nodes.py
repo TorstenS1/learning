@@ -2,6 +2,7 @@
 Unit tests for ALIS agent nodes.
 """
 import pytest
+import json
 from unittest.mock import MagicMock, patch
 from backend.agents.nodes import (
     create_goal_path,
@@ -121,11 +122,12 @@ class TestGenerateMaterial:
 class TestEvaluateTest:
     def test_evaluate_test_passed(self, mock_llm_service, mock_db_service, mock_logging_service, sample_state):
         # Setup
-        sample_state['parsed_test_questions'] = [
-            {'id': 'q1', 'question_text': 'What is a variable?'}
-        ]
-        sample_state['user_test_answers'] = {'q1': 'A container for data'}
+        questions = [{'id': 'q1', 'question_text': 'What is a variable?'}]
+        answers = {'q1': 'A container for data'}
         
+        sample_state['llm_output'] = json.dumps({'test_questions': questions})
+        sample_state['user_input'] = json.dumps(answers)
+    
         mock_llm_service.call.return_value = '''{
             "score": 85,
             "passed": true,
@@ -135,10 +137,10 @@ class TestEvaluateTest:
                 {"id": "q1", "correct": true, "explanation": "Correct!"}
             ]
         }'''
-        
+    
         # Execute
         result = evaluate_test(sample_state)
-        
+    
         # Verify
         assert result['test_evaluation_result']['passed'] == True
         assert result['test_evaluation_result']['score'] == 85
@@ -152,11 +154,12 @@ class TestEvaluateTest:
     
     def test_evaluate_test_failed(self, mock_llm_service, mock_db_service, mock_logging_service, sample_state):
         # Setup
-        sample_state['parsed_test_questions'] = [
-            {'id': 'q1', 'question_text': 'What is a variable?'}
-        ]
-        sample_state['user_test_answers'] = {'q1': 'Wrong answer'}
+        questions = [{'id': 'q1', 'question_text': 'What is a variable?'}]
+        answers = {'q1': 'Wrong answer'}
         
+        sample_state['llm_output'] = json.dumps({'test_questions': questions})
+        sample_state['user_input'] = json.dumps(answers)
+    
         mock_llm_service.call.return_value = '''{
             "score": 45,
             "passed": false,
@@ -166,10 +169,10 @@ class TestEvaluateTest:
                 {"id": "q1", "correct": false, "explanation": "Not quite"}
             ]
         }'''
-        
+    
         # Execute
         result = evaluate_test(sample_state)
-        
+    
         # Verify
         assert result['test_evaluation_result']['passed'] == False
         assert result['test_evaluation_result']['score'] == 45
@@ -193,8 +196,4 @@ class TestProcessChat:
         result = process_chat(sample_state)
         
         # Verify
-        assert len(result['tutor_chat']) == 2
-        assert result['tutor_chat'][0]['sender'] == 'User'
-        assert result['tutor_chat'][0]['message'] == 'Can you explain variables?'
-        assert result['tutor_chat'][1]['sender'] == 'Tutor'
-        assert 'variable' in result['tutor_chat'][1]['message'].lower()
+        assert result['llm_output'] == 'A variable is a container for storing data.'

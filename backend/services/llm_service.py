@@ -6,6 +6,8 @@ import json
 import requests
 import openai
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+import os
 
 from backend.config.settings import (
     GEMINI_API_KEY, GEMINI_API_URL, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS,
@@ -29,6 +31,11 @@ class LLMService:
         self.use_simulation = use_simulation
         self.provider = LLM_PROVIDER
         self.client = None
+        
+        # Setup LLM call logging
+        self.llm_log_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'logs', 'llm_calls')
+        os.makedirs(self.llm_log_dir, exist_ok=True)
+        self.llm_log_file = os.path.join(self.llm_log_dir, f'llm_calls_{datetime.now().strftime("%Y%m%d")}.jsonl')
 
         if not use_simulation:
             if self.provider == "gemini":
@@ -48,6 +55,59 @@ class LLMService:
             else:
                 print(f"Warning: Unknown LLM_PROVIDER '{self.provider}'. Falling back to simulation mode.")
                 self.use_simulation = True
+    
+    def _log_llm_call(self, request_data: Dict[str, Any], response_data: Dict[str, Any], error: Optional[str] = None):
+        """
+        Log LLM call details to both console and file.
+        
+        Args:
+            request_data: Request details (system_prompt, user_prompt, parameters)
+            response_data: Response details (text, tokens, etc.)
+            error: Error message if call failed
+        """
+        timestamp = datetime.now().isoformat()
+        
+        # Create log entry
+        log_entry = {
+            'timestamp': timestamp,
+            'provider': self.provider,
+            'simulation': self.use_simulation,
+            'request': request_data,
+            'response': response_data,
+            'error': error
+        }
+        
+        # Console logging (formatted)
+        print("\n" + "="*80)
+        print(f"🤖 LLM CALL LOG - {timestamp}")
+        print("="*80)
+        print(f"Provider: {self.provider.upper()} {'(SIMULATION)' if self.use_simulation else '(REAL API)'}")
+        print(f"\n📤 REQUEST:")
+        print(f"  System Prompt: {request_data.get('system_prompt', '')[:200]}...")
+        print(f"  User Prompt: {request_data.get('user_prompt', '')[:200]}...")
+        print(f"  Temperature: {request_data.get('temperature', 'N/A')}")
+        print(f"  Max Tokens: {request_data.get('max_tokens', 'N/A')}")
+        print(f"  Grounding: {request_data.get('use_grounding', False)}")
+        
+        if error:
+            print(f"\n❌ ERROR:")
+            print(f"  {error}")
+        else:
+            print(f"\n📥 RESPONSE:")
+            response_text = response_data.get('text', '')
+            print(f"  Length: {len(response_text)} characters")
+            print(f"  Preview: {response_text[:300]}...")
+            if 'tokens_used' in response_data:
+                print(f"  Tokens Used: {response_data['tokens_used']}")
+        
+        print("="*80 + "\n")
+        
+        # File logging (JSONL format)
+        try:
+            with open(self.llm_log_file, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        except Exception as e:
+            print(f"Warning: Could not write to LLM log file: {e}")
     
     def call(
         self,
@@ -70,10 +130,36 @@ class LLMService:
         Returns:
             LLM response text
         """
-        if self.use_simulation:
-            return self._simulate_response(system_prompt, user_prompt)
-        else:
-            return self._real_api_call(system_prompt, user_prompt, use_grounding, temperature, max_tokens)
+        request_data = {
+            'system_prompt': system_prompt,
+            'user_prompt': user_prompt,
+            'use_grounding': use_grounding,
+            'temperature': temperature,
+            'max_tokens': max_tokens
+        }
+        
+        try:
+            if self.use_simulation:
+                response_text = self._simulate_response(system_prompt, user_prompt)
+            else:
+                response_text = self._real_api_call(system_prompt, user_prompt, use_grounding, temperature, max_tokens)
+            
+            response_data = {
+                'text': response_text,
+                'success': True
+            }
+            
+            self._log_llm_call(request_data, response_data)
+            return response_text
+            
+        except Exception as e:
+            error_msg = str(e)
+            response_data = {
+                'text': '',
+                'success': False
+            }
+            self._log_llm_call(request_data, response_data, error=error_msg)
+            raise
     
     def _simulate_response(self, system_prompt: str, user_prompt: str) -> str:
         """
@@ -86,11 +172,6 @@ class LLMService:
         Returns:
             Simulated response text
         """
-        print("--- LLM API CALL (SIMULATION) ---")
-        print(f"Role (System Prompt Length): {len(system_prompt)} characters")
-        print(f"User Prompt: '{user_prompt[:200]}...'")
-        print("---------------------------------")
-        
         # Determine agent role from system prompt (check for both English and German)
         if "ARCHITECT" in system_prompt or "ARCHITEKT" in system_prompt:
             if "[ACTION: PERFORM_PATH_SURGERY]" in user_prompt:
@@ -281,10 +362,6 @@ Denken Sie daran: Jeder Fehler bringt Sie näher ans Ziel. Lassen Sie mich Ihnen
         Raises:
             Exception: If API call fails
         """
-        print(f"--- LLM API CALL (REAL - Provider: {self.provider.upper()}) ---")
-        print(f"User Prompt: '{user_prompt[:200]}...'")
-        print("--------------------------------------------------")
-
         if self.provider == "gemini":
             return self._call_gemini_api(system_prompt, user_prompt, use_grounding, temperature, max_tokens)
         elif self.provider == "openai":

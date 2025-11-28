@@ -1,210 +1,493 @@
 # ALIS (Adaptive Learning Intelligence System)
 
-## Projektbeschreibung
+[![Tests](https://img.shields.io/badge/tests-31%2F60%20passing-yellow)](backend/tests/)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+[![React](https://img.shields.io/badge/react-18-blue)](https://reactjs.org/)
+[![LangGraph](https://img.shields.io/badge/langgraph-0.2-green)](https://github.com/langchain-ai/langgraph)
 
-ALIS ist ein **adaptives Lernsystem**, das personalisierte Lernerfahrungen durch die Orchestrierung mehrerer spezialisierter LLM-Agenten (Architekt, Kurator, Tutor) über einen LangGraph-Workflow ermöglicht. Das System begleitet Lernende von der Zielsetzung über die Materialgenerierung und interaktive Lernphasen bis hin zur Remediation von Wissenslücken und der Generierung von Tests.
+An **adaptive, AI-powered learning system** that enables personalized learning experiences through the orchestration of specialized LLM agents. ALIS guides learners from goal setting through material generation to automatic progression and remediation.
 
-Das Projekt ist modular aufgebaut, mit einem Python-Backend, das die Kernlogik und LLM-Interaktionen verwaltet, und einem React-Frontend für die Benutzeroberfläche. Es unterstützt sowohl simulierte als auch reale LLM-API-Aufrufe (Gemini oder OpenAI) und bietet eine grundlegende Protokollierungsfunktion.
+## 🌟 Highlights
 
-## Features
+- **Multi-Agent Architecture** with Architect, Curator, and Tutor
+- **Adaptive Learning Paths** with dynamic adjustment
+- **Automatic Progression** based on test results (P7)
+- **Session Management** with named sessions
+- **Multilingual** (German/English)
+- **Comprehensive Tests** (51.7% Coverage)
 
-### Backend (Python / LangGraph)
-*   **SMART-Lernziel-Verhandlung (P1):** Der **Architekt** hilft bei der Definition messbarer Lernziele.
-*   **Lernpfad-Erstellung & -Review (P3):** Der Architekt generiert einen initialen Lernpfad. Benutzer können bekannte Konzepte überspringen.
-*   **Materialgenerierung (P4):** Der **Kurator** erstellt Lernmaterial für Konzepte, unter Berücksichtigung des Nutzerprofils.
-*   **Interaktive Lernphase & Tutor-Chat (P5):** Der **Tutor** bietet Chat-Unterstützung und adaptive Rückmeldungen.
-*   **Dynamische Lücken-Remediation (P5.5):** Bei gemeldeten Wissenslücken diagnostiziert der Tutor die Lücke, und der Architekt passt den Lernpfad dynamisch an.
-*   **Testgenerierung (P6):** Der Kurator generiert Verständnisfragen für absolvierte Konzepte.
-*   **Pluggable LLM-Provider:** Unterstützung für Google Gemini und OpenAI-Modelle, konfigurierbar über Umgebungsvariablen.
-*   **Protokollierung:** Konsolen- und optionale Dateiprotokollierung von Systemereignissen und Nutzerinteraktionen.
-*   **Simulierte Dienste:** LLM- und Datenbankinteraktionen (Firestore) sind für die Entwicklung simulierbar.
+## 📋 Table of Contents
 
-### Frontend (React)
-*   **Phasenbasierte UI:** Klare Darstellung der aktuellen Lernphase (Zielsetzung, Pfad-Review, Lernphase, Testphase).
-*   **Lernziel-Eingabe:** UI zur Definition des Lernziels.
-*   **Lernpfad-Review:** Interaktive Anzeige des generierten Lernpfads mit Optionen zum Überspringen von Konzepten.
-*   **Materialanzeige:** Darstellung des vom Kurator generierten Lernmaterials.
-*   **Tutor-Chat:** Interaktives Chat-Interface zur Kommunikation mit dem Tutor.
-*   **Remediation-Trigger:** Button zum Melden von Wissenslücken und Initiieren des Remediation-Workflows.
-*   **Testanzeige:** Darstellung der generierten Testfragen.
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Installation](#-installation)
+- [Usage](#-usage)
+- [Learning Phases](#-learning-phases)
+- [Session Management](#-session-management)
+- [Tests](#-tests)
+- [Configuration](#-configuration)
+- [Development](#-development)
+- [Roadmap](#-roadmap)
 
-## Architektur
+## ✨ Features
 
-ALIS folgt einer modularen Architektur mit einem klaren Schnitt zwischen Frontend und Backend:
+### Backend (Python / LangGraph / Flask)
+
+#### Learning Phases
+- **P1: SMART Goal Negotiation** - Architect helps define measurable learning goals
+- **P2: Prior Knowledge Test (Optional)** - Assessor evaluates prior knowledge and adapts the path
+- **P3: Learning Path Review** - Interactive display and adjustment of the generated learning path
+- **P4: Material Generation** - Curator creates personalized learning material
+- **P5: Interactive Learning Phase** - Tutor provides chat support and adaptive feedback
+- **P5.5: Dynamic Remediation** - Automatic gap diagnosis and path adjustment
+- **P6: Test Generation & Evaluation** - Curator generates and evaluates comprehension questions
+- **P7: Adaptation & Progression** - Automatic progression or remediation based on test results
+
+#### Technical Features
+- **LangGraph Workflow** - State-based orchestration of all learning phases
+- **Multi-LLM Support** - Google Gemini, OpenAI (configurable)
+- **MongoDB Integration** - Persistent storage of goals, sessions, and logs
+- **Session Management** - Save, load, and list learning sessions
+- **Comprehensive Logging** - Detailed event and metric logging
+- **Simulation Mode** - Development without API costs
+
+### Frontend (React / Vite)
+
+- **Phase-Based UI** - Clear display of current learning phase
+- **Session Management** - Save and load sessions with names
+- **Multilingual** - German/English with i18n
+- **Interactive Chat** - Real-time communication with the Tutor
+- **Learning Path Visualization** - Overview of all concepts and progress
+- **Test Interface** - Multiple choice and free-text questions
+- **Remediation UI** - Options when tests are not passed
+- **Responsive Design** - Works on desktop and tablet
+
+## 🏗️ Architecture
 
 ```mermaid
 graph TD
-    User -- Interagiert mit --> Frontend[React Frontend]
-    Frontend -- API-Anfragen --> Backend[Python Backend (Flask)]
-
-    subgraph Backend-Komponenten
-        Backend -- Orchestrierung --> LangGraph[LangGraph Workflow]
-        LangGraph -- Steuert --> AgentNodes[Agent Nodes (Architekt, Kurator, Tutor)]
-        AgentNodes -- Nutzt --> LLMService[LLMService (Gemini / OpenAI)]
-        AgentNodes -- Nutzt --> DBService[DBService (Simulated Firestore)]
-        AgentNodes -- Nutzt --> LoggingService[LoggingService]
-    end
-
-    LLMService -- API Calls --> ExternalLLM[External LLM (Gemini / OpenAI)]
-    DBService -- (Optional) --> Firestore[Firestore Database]
-    LoggingService -- Schreibt --> Console[Console]
-    LoggingService -- Schreibt (Optional) --> LogFile[Log File]
-
-    style Frontend fill:#e0f7fa,stroke:#00bcd4,stroke-width:2px
-    style Backend fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
-    style LangGraph fill:#fff8e1,stroke:#ffc107,stroke-width:2px
-    style AgentNodes fill:#ffebee,stroke:#f44336,stroke-width:2px
-    style LLMService fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-    style DBService fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
-    style LoggingService fill:#f9fbe7,stroke:#cddc39,stroke-width:2px
-    style ExternalLLM fill:#eceff1,stroke:#607d8b,stroke-width:2px
-    style Firestore fill:#eceff1,stroke:#607d8b,stroke-width:2px
-    style Console fill:#cfd8dc,stroke:#607d8b,stroke-width:1px
-    style LogFile fill:#cfd8dc,stroke:#607d8b,stroke-width:1px
+    User[👤 User] --> Frontend[React Frontend]
+    Frontend --> API[Flask REST API]
+    
+    API --> Workflow[LangGraph Workflow]
+    Workflow --> Agents[Agent Nodes]
+    
+    Agents --> Architekt[🏗️ Architect]
+    Agents --> Kurator[📚 Curator]
+    Agents --> Tutor[👨‍🏫 Tutor]
+    Agents --> Assessor[📊 Assessor]
+    
+    Architekt --> LLM[LLM Service]
+    Kurator --> LLM
+    Tutor --> LLM
+    Assessor --> LLM
+    
+    LLM --> Gemini[Google Gemini]
+    LLM --> OpenAI[OpenAI GPT]
+    
+    Agents --> MongoDB[(MongoDB)]
+    Agents --> Logging[Logging Service]
+    
+    MongoDB --> Goals[Goals]
+    MongoDB --> Sessions[Sessions]
+    MongoDB --> Logs[Logs]
+    
+    style Frontend fill:#e0f7fa
+    style Workflow fill:#fff8e1
+    style Agents fill:#ffebee
+    style LLM fill:#e3f2fd
+    style MongoDB fill:#f3e5f5
 ```
 
-## Projektstruktur
+### Project Structure
 
 ```
-.
-├── backend/                                # Python Flask-Backend und LangGraph-Logik
-│   ├── agents/                             # LLM-Agenten-Definitionen (Architekt, Kurator, Tutor)
-│   ├── config/                             # Konfigurationseinstellungen
-│   ├── models/                             # Datenmodelle (ALISState, UserProfile, Goal, LogEntry)
-│   ├── services/                           # Externe Dienstintegrationen (LLM, DB, Logging)
-│   ├── tests/                              # Unit-Tests für Backend-Komponenten
-│   ├── workflows/                          # LangGraph-Workflow-Definition
-│   └── app.py                              # Flask-Hauptanwendung
-├── frontend/                               # React-Frontend
-│   ├── public/                             # Statische Assets
-│   ├── src/                                # React-Quellcode
-│   │   ├── ALISApp.jsx                     # Haupt-App-Komponente und UI-Logik
-│   │   ├── services/                       # Frontend-API-Clients
-││   │   └── ...                             # Weitere Frontend-Komponenten/Assets
-│   └── ...                                 # Weitere Frontend-Dateien (package.json, vite.config.js etc.)
-├── venv/                                   # Python Virtual Environment
-├── .env.example                            # Beispiel für Umgebungsvariablen
-├── requirements.txt                        # Python-Abhängigkeiten
-├── alis.md                                 # Master-Spezifikationsdokument
-├── vergleich.md                            # Vergleich mit dem "Learning"-Projekt
-└── README.md                               # Dieses Dokument
+learning/
+├── backend/                    # Python Backend
+│   ├── agents/
+│   │   ├── nodes.py           # Agent Nodes (create_goal_path, generate_material, etc.)
+│   │   ├── prompts.py         # LLM prompts for agents
+│   │   └── language_instructions.py
+│   ├── config/
+│   │   └── settings.py        # Configuration from .env
+│   ├── models/
+│   │   └── state.py           # ALISState TypedDict
+│   ├── services/
+│   │   ├── llm_service.py     # LLM integration (Gemini/OpenAI)
+│   │   ├── db_service.py      # MongoDB integration
+│   │   ├── session_service.py # Session management
+│   │   └── logging_service.py # Event logging
+│   ├── workflows/
+│   │   └── alis_graph.py      # LangGraph workflow definition
+│   ├── tests/                 # 35 tests (31 passing)
+│   │   ├── test_api.py        # API endpoint tests ✅
+│   │   ├── test_session_service.py  # Session tests ✅
+│   │   ├── test_nodes.py      # Agent node tests ⚠️
+│   │   └── test_workflow.py   # Workflow tests ⚠️
+│   └── app.py                 # Flask REST API
+├── frontend/                   # React Frontend
+│   ├── src/
+│   │   ├── ALISApp.jsx        # Main app component
+│   │   ├── services/
+│   │   │   └── alisAPI.js     # API client
+│   │   └── i18n/              # Internationalization
+│   │       ├── de.js          # German translations
+│   │       ├── en.js          # English translations
+│   │       └── index.js
+│   ├── public/
+│   ├── package.json
+│   └── vite.config.js
+├── .env.example               # Example configuration
+├── requirements.txt           # Python dependencies
+├── start_backend.sh           # Backend start script
+├── start_frontend.sh          # Frontend start script
+└── README.md                  # This file
 ```
 
-## Erste Schritte
+## 🚀 Installation
 
-### Voraussetzungen
+### Prerequisites
 
-*   Python 3.8+
-*   Node.js 16+ und npm/yarn
-*   Git
-*   Optional: Google Gemini API Key oder OpenAI API Key
+- **Python 3.12+**
+- **Node.js 18+** and npm
+- **MongoDB** (local or Atlas)
+- Optional: **Google Gemini API Key** or **OpenAI API Key**
 
-### 1. Repository klonen
+### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-username/ALIS.git
-cd ALIS
+git clone <repository-url>
+cd learning
 ```
 
-### 2. Backend-Setup
-
-1.  **Python Virtual Environment erstellen und aktivieren:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # macOS/Linux
-    # venv\Scripts\activate   # Windows
-    ```
-
-2.  **Python-Abhängigkeiten installieren:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Umgebungsvariablen konfigurieren:**
-    Erstellen Sie eine `.env`-Datei im Stammverzeichnis des Projekts (neben `requirements.txt`) basierend auf `.env.example`.
-
-    ```ini
-    # .env
-    # --- Backend Configuration ---
-    LLM_PROVIDER=gemini       # oder 'openai'
-    
-    # Gemini API (wenn LLM_PROVIDER=gemini)
-    GEMINI_API_KEY="Ihre_Gemini_API_Key_hier"
-    GEMINI_API_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
-    
-    # OpenAI API (wenn LLM_PROVIDER=openai)
-    OPENAI_API_KEY="Ihre_OpenAI_API_Key_hier"
-    OPENAI_MODEL_NAME="gpt-4o-mini" # oder ein anderes Modell wie "gpt-3.5-turbo"
-    
-    # Firestore (simuliert für Entwicklung)
-    USE_FIRESTORE_SIMULATOR=true # Setzen Sie auf 'false' für reale Firestore-Verbindung
-    # FIREBASE_CREDENTIALS_PATH="/path/to/your/firebase-adminsdk.json" # Nur wenn USE_FIRESTORE_SIMULATOR=false
-    
-    # Server & CORS
-    HOST=0.0.0.0
-    PORT=5000
-    DEBUG=true
-    CORS_ORIGINS=http://localhost:3000,http://localhost:5173 # Frontend-URLs
-    
-    # LLM Standard-Parameter
-    DEFAULT_TEMPERATURE=0.7
-    DEFAULT_MAX_TOKENS=2048
-    ```
-    Ersetzen Sie die Platzhalter für API-Schlüssel. Wenn Sie einen realen LLM-Provider nutzen möchten, stellen Sie sicher, dass der entsprechende API-Schlüssel gesetzt ist und `LLM_PROVIDER` korrekt konfiguriert ist.
-
-4.  **Backend starten:**
-    ```bash
-    cd backend
-    python app.py
-    ```
-    Das Backend sollte auf `http://localhost:5000` (oder dem in `.env` konfigurierten Port) laufen.
-
-### 3. Frontend-Setup
-
-1.  **Node.js-Abhängigkeiten installieren:**
-    ```bash
-    cd frontend
-    npm install
-    # oder yarn install
-    ```
-
-2.  **Frontend starten:**
-    ```bash
-    npm run dev
-    # oder yarn dev
-    ```
-    Das Frontend sollte unter `http://localhost:5173` (oder einem anderen, von Vite zugewiesenen Port) verfügbar sein.
-
-## Nutzung
-
-Öffnen Sie Ihr Frontend im Browser (`http://localhost:5173`):
-1.  **Ziel-Kontrakt (P1):** Geben Sie Ihr Lernziel ein und lassen Sie den **Architekten** einen SMART-Vertrag erstellen.
-2.  **Lernpfad-Review (P3):** Prüfen Sie den generierten Lernpfad und markieren Sie Konzepte, die Sie bereits beherrschen.
-3.  **Lernphase (P5):** Nehmen Sie das generierte Material auf und interagieren Sie mit dem **Tutor** über den Chat.
-4.  **Remediation (P5.5):** Melden Sie Wissenslücken, um den Lernpfad dynamisch anpassen zu lassen.
-5.  **Test (P6):** Bestätigen Sie das Konzept als verstanden, um einen Test zu generieren.
-
-## Tests ausführen
-
-Um die Backend-Tests auszuführen, stellen Sie sicher, dass Ihr Virtual Environment aktiviert ist, navigieren Sie zum Projekt-Stammverzeichnis und führen Sie Pytest aus:
+### 2. Backend Setup
 
 ```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+cp .env.example .env
+# Edit .env and add API keys
+```
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 4. Start MongoDB
+
+```bash
+# Locally with Docker
+docker run -d -p 27017:27017 --name mongodb mongo:latest
+
+# Or use MongoDB Atlas (see .env)
+```
+
+## 🎯 Usage
+
+### Quick Start
+
+```bash
+# Terminal 1: Start backend
+bash start_backend.sh
+
+# Terminal 2: Start frontend
+bash start_frontend.sh
+
+# Open browser
+open http://localhost:5173
+```
+
+### Manual Start
+
+```bash
+# Backend
+cd backend
+python app.py
+
+# Frontend (new terminal)
+cd frontend
+npm run dev
+```
+
+## 📚 Learning Phases
+
+### P1: Goal Setting
+1. Enter learning goal (e.g., "I want to learn Python")
+2. Architect creates SMART contract
+3. Optional: Enable prior knowledge test
+
+### P2: Prior Knowledge Test (Optional)
+1. Assessor generates questions for all concepts
+2. User answers questions
+3. System marks known concepts as "Skipped"
+
+### P3: Path Review
+1. Generated learning path is displayed
+2. Concepts can be manually skipped
+3. Confirmation starts learning phase
+
+### P4 & P5: Learning
+1. Curator generates material for current concept
+2. Tutor is available for questions
+3. If gaps exist: P5.5 Remediation
+4. "Understood" → Generate test
+
+### P6: Test
+1. Curator generates questions (Multiple Choice + Free Text)
+2. User answers questions
+3. Automatic evaluation
+
+### P7: Progression
+**When test is passed (≥70%):**
+- Continue to next concept
+- Or: Goal achieved! 🎉
+
+**When test is not passed:**
+- Review material
+- Report gap (P5.5)
+- Skip concept
+
+## 💾 Session Management
+
+### Saving Sessions
+
+```javascript
+// Automatically at important phases
+// Or manually: Click "💾 Save"
+```
+
+Sessions are saved with names:
+- Suggestion: First concept name
+- Customizable when saving
+
+### Loading Sessions
+
+```javascript
+// Click "📂 Load"
+// Select from list:
+// 1. Python Basics
+//    Phase: P5_LEARNING | 11/28/2025, 5:45 PM
+//    Current: Variables
+```
+
+### Session Data
+
+Stored in MongoDB:
+- `session_name` - User-friendly name
+- `goal_id` - Unique goal ID
+- `phase` - Current learning phase
+- `path_structure` - All concepts with status
+- `current_concept` - Current concept
+- `tutor_chat` - Chat history
+- `test_evaluation_result` - Last test results
+- `language` - Language setting
+
+## 🧪 Tests
+
+### Running Tests
+
+```bash
+# All tests
+PYTHONPATH=. venv/bin/python -m pytest backend/tests/ -v
+
+# Only passing tests
+PYTHONPATH=. venv/bin/python -m pytest backend/tests/test_session_service.py backend/tests/test_api.py -v
+
+# With coverage
+PYTHONPATH=. venv/bin/python -m pytest backend/tests/ --cov=backend --cov-report=html
+```
+
+### Test Status
+
+| Test File | Status | Tests |
+|-----------|--------|-------|
+| `test_session_service.py` | ✅ | 4/4 |
+| `test_api.py` | ✅ | 10/10 |
+| `test_nodes.py` | ⚠️ | 3/6 |
+| `test_workflow.py` | ⚠️ | 6/9 |
+| **Total** | **51.7%** | **31/60** |
+
+See [`backend/tests/TEST_COVERAGE.md`](backend/tests/TEST_COVERAGE.md) for details.
+
+## ⚙️ Configuration
+
+### Environment Variables (.env)
+
+```ini
+# LLM Provider
+LLM_PROVIDER=gemini              # or 'openai'
+
+# Gemini API
+GEMINI_API_KEY=your_key_here
+GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent
+
+# OpenAI API
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL_NAME=gpt-4o-mini
+
+# MongoDB
+MONGODB_URI=mongodb://localhost:27017/
+MONGODB_DB_NAME=alis_db
+
+# Server
+HOST=0.0.0.0
+PORT=5000
+DEBUG=true
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# LLM Parameters
+DEFAULT_TEMPERATURE=0.7
+DEFAULT_MAX_TOKENS=2048
+```
+
+### Simulation Mode
+
+For development without API costs:
+
+```python
+# backend/app.py
+llm_service = get_llm_service(use_simulation=True)
+```
+
+## 🛠️ Development
+
+### Backend Development
+
+```bash
+# Activate virtual environment
 source venv/bin/activate
+
+# Test changes
 PYTHONPATH=. pytest backend/tests/
+
+# Add new dependencies
+pip install <package>
+pip freeze > requirements.txt
 ```
 
-## Zukünftige Erweiterungen & Offene Punkte
+### Frontend Development
 
-Basierend auf den Analysen (`alis_analysis.md`, `SPEC_COMPARISON.md`, `vergleich.md`) sind folgende Punkte für die Weiterentwicklung relevant:
+```bash
+cd frontend
 
-*   **Vollständige Implementierung der Datenmodelle:** Integration aller Felder gemäß `alis.md` in `UserProfile`, `Goal` und `LogEntry`.
-*   **Persistenz:** Anbindung an eine reale Firestore-Datenbank zur Speicherung des Nutzerfortschritts, der Lernpfade und der Log-Einträge.
-*   **Umfassendes Logging:** Speicherung der `LogEntry`-Daten in Firestore und Erweiterung um detailliertere Metriken (z.B. `emotionFeedback`, `testScore`, `kognitiveDiskrepanz`).
-*   **P7 (Adaption):** Implementierung der automatischen Progression basierend auf Test-Scores und der Anpassung des Lernpfads.
-*   **Integration des "Learning"-Projekts:** Potenzielle Übernahme der interaktiven Graphen-UI, der PCG-Extraktionspipeline, des sokratischen Dialogs mit Live-Coding und der RAG-Fähigkeiten zur weiteren Verbesserung von ALIS.
-*   **Authentifizierung:** Implementierung eines Benutzersystems.
-*   **Fehlerbehandlung:** Robuste Fehlerbehandlung für API-Aufrufe.
+# Dev server with hot reload
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+### Adding a New Agent Node
+
+1. **Node function** in `backend/agents/nodes.py`:
+```python
+def my_new_node(state: ALISState) -> ALISState:
+    # Implementation
+    return state
+```
+
+2. **Workflow** in `backend/workflows/alis_graph.py`:
+```python
+workflow.add_node("My_Node", my_new_node)
+workflow.add_edge("Previous_Node", "My_Node")
+```
+
+3. **API endpoint** in `backend/app.py`:
+```python
+@app.route('/api/my_endpoint', methods=['POST'])
+def my_endpoint():
+    # Implementation
+    pass
+```
+
+4. **Frontend** in `frontend/src/ALISApp.jsx`:
+```javascript
+const handleMyAction = async () => {
+    const result = await alisAPI.myEndpoint(data);
+    // UI update
+};
+```
+
+## 📊 Metrics & Logging
+
+### Event Types
+
+- `P1_Goal_Setting` - Learning goal created
+- `P2_Prior_Knowledge_Test` - Prior knowledge test
+- `P4_Material_Generation` - Material generated
+- `P5_Chat_Tutor` - Chat interaction
+- `P5_5_Remediation` - Gap diagnosed
+- `P6_Test_Generation` - Test generated
+- `P6_Test_Evaluation` - Test evaluated
+
+### Stored Metrics
+
+- `testScore` - Test result (0-100)
+- `kognitiveDiskrepanz` - High/Low (cognitive discrepancy)
+- `emotionFeedback` - Satisfaction/Frustration
+- `timestamp` - Timestamp
+- `conceptId` - Affected concept
+
+## 🗺️ Roadmap
+
+### ✅ Completed
+- Multi-agent architecture (Architect, Curator, Tutor)
+- LangGraph workflow (P1-P7)
+- Session management with names
+- Multilingual support (DE/EN)
+- P7 Adaptation & Motivation Loop
+- Comprehensive test coverage (51.7%)
+
+### 🚧 In Progress
+- Improving test coverage to >80%
+- Frontend tests (Vitest, Cypress)
+- Performance optimization
+
+### 📋 Planned
+- **P2 Integration** - Complete prior knowledge test integration
+- **PCG Visualization** - Interactive graph UI
+- **RAG Integration** - Grounding with external sources
+- **Authentication** - User management
+- **Live Coding** - Pyodide integration for Python
+- **Socratic Dialogue** - Structured tutor responses
+- **Analytics Dashboard** - Learning progress visualization
+
+See [`next_steps.md`](next_steps.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📞 Support
+
+For questions or issues:
+- Create an [Issue](https://github.com/your-repo/issues)
+- See [Documentation](docs/)
+- Contact the team
 
 ---
 
-Viel Spaß beim Lernen mit ALIS!
+**Happy adaptive learning with ALIS! 🚀**

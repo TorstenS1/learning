@@ -15,6 +15,30 @@ from backend.services.db_service import get_db_service
 from backend.services.logging_service import logging_service
 
 
+def extract_json_from_markdown(text: str) -> str:
+    """
+    Extract JSON from markdown code blocks.
+    
+    LLMs often wrap JSON in ```json ... ``` blocks. This function extracts the JSON content.
+    
+    Args:
+        text: Text that may contain markdown code blocks
+        
+    Returns:
+        Extracted JSON string, or original text if no code block found
+    """
+    # Pattern to match ```json ... ``` or ``` ... ```
+    pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
+    match = re.search(pattern, text, re.DOTALL)
+    
+    if match:
+        return match.group(1).strip()
+    
+    # If no code block, return original text stripped
+    return text.strip()
+
+
+
 def create_goal_path(state: ALISState) -> ALISState:
     """
     P1/P3: Architect creates SMART goal and initial learning path.
@@ -31,13 +55,13 @@ def create_goal_path(state: ALISState) -> ALISState:
     )
     llm_result = llm.call(ARCHITECT_PROMPT, user_prompt, use_grounding=True)
     
-    state['llm_output'] = llm_result
+    state['llm_output'] = extract_json_from_markdown(llm_result)
     
     new_goal: Optional[Goal] = None
     new_path_structure: List[ConceptDict] = []
     
     try:
-        parsed_result = json.loads(llm_result)
+        parsed_result = json.loads(extract_json_from_markdown(llm_result))
         
         goal_contract = parsed_result.get('goal_contract', {})
         path_structure_data = parsed_result.get('path_structure', [])
@@ -173,7 +197,7 @@ def perform_remediation(state: ALISState) -> ALISState:
     new_current_concept = state['current_concept']
 
     try:
-        parsed_result = json.loads(llm_result)
+        parsed_result = json.loads(extract_json_from_markdown(llm_result))
         new_path_data = parsed_result.get('path_structure', state['path_structure'])
         new_current_concept_data = parsed_result.get('new_current_concept', state['current_concept'])
 
@@ -251,7 +275,7 @@ def generate_test(state: ALISState) -> ALISState:
     )
     
     llm_result = llm.call(CURATOR_PROMPT, user_prompt)
-    state['llm_output'] = llm_result
+    state['llm_output'] = extract_json_from_markdown(llm_result)
     
     logging_service.create_log_entry(
         eventType="P6_Test_Generation",
@@ -304,7 +328,7 @@ def evaluate_test(state: ALISState) -> ALISState:
     llm_evaluation_result = llm.call(CURATOR_PROMPT, evaluation_prompt)
     
     try:
-        eval_data = json.loads(llm_evaluation_result)
+        eval_data = json.loads(extract_json_from_markdown(llm_evaluation_result))
         score = eval_data.get('score', 0)
         passed = eval_data.get('passed', False)
         feedback = eval_data.get('feedback', "No specific feedback from LLM.")
@@ -373,10 +397,11 @@ def generate_prior_knowledge_test(state: ALISState) -> ALISState:
     response = llm.call(ASSESSOR_PROMPT, prompt)
     
     try:
-        data = json.loads(response)
+        data = json.loads(extract_json_from_markdown(response))
         questions = data.get('questions', [])
     except Exception as e:
         print(f"Error parsing prior knowledge questions: {e}")
+        print(f"Response was: {response[:500]}...")
         questions = []
         
     state['llm_output'] = json.dumps({'test_questions': questions})
@@ -412,7 +437,7 @@ def evaluate_prior_knowledge_test(state: ALISState) -> ALISState:
     response = llm.call(ASSESSOR_PROMPT, prompt)
     
     try:
-        data = json.loads(response)
+        data = json.loads(extract_json_from_markdown(response))
         mastered_ids = data.get('mastered_concepts', [])
         feedback = data.get('feedback', "")
         
