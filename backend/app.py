@@ -51,6 +51,8 @@ def create_initial_state(payload: Dict[str, Any]) -> ALISState:
         llm_output="",
         user_input=payload.get('userInput', ''),
         remediation_needed=payload.get('remediationNeeded', False),
+        language=payload.get('language', 'de'),  # Extract language from payload
+        next_step=payload.get('nextStep', 'P1_P3_Goal_Path_Creation'),  # Routing parameter
         user_profile=payload.get('userProfile', {
             'stylePreference': 'Analogien-basiert',
             'paceWPM': 180
@@ -179,6 +181,7 @@ def get_material():
             }), 400
         
         initial_state = create_initial_state(payload)
+        initial_state['next_step'] = 'P4_Material_Generation'  # Route to material generation
         
         # Run workflow from P4_Material_Generation
         final_state_output = run_workflow_step(initial_state, "P4_Material_Generation")
@@ -231,6 +234,7 @@ def chat():
             }), 400
         
         initial_state = create_initial_state(payload)
+        initial_state['next_step'] = 'P5_Chat_Tutor'  # Route to chat
         
         # Run workflow from P5_Chat_Tutor
         final_state_output = run_workflow_step(initial_state, "P5_Chat_Tutor")
@@ -281,6 +285,7 @@ def diagnose_luecke():
             }), 400
         
         initial_state = create_initial_state(payload)
+        initial_state['next_step'] = 'P5_5_Diagnosis'  # Route to diagnosis
         
         # Run workflow from P5_5_Diagnosis
         final_state_output = run_workflow_step(initial_state, "P5_5_Diagnosis")

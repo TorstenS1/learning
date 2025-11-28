@@ -91,20 +91,21 @@ class LLMService:
         print(f"User Prompt: '{user_prompt[:200]}...'")
         print("---------------------------------")
         
-        # Determine agent role from system prompt
-        if "ARCHITEKT" in system_prompt:
-            if "Pfad-Chirurgie" in user_prompt or "Pfad-Chirurgie" in system_prompt:
+        # Determine agent role from system prompt (check for both English and German)
+        if "ARCHITECT" in system_prompt or "ARCHITEKT" in system_prompt:
+            if "[ACTION: PERFORM_PATH_SURGERY]" in user_prompt:
                 # Simulate path surgery LLM output
                 # This should return the new path_structure and current_concept in JSON
                 return json.dumps({
                     "path_structure": [
-                        {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Offen", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1},
-                        {"id": "K1-Grundlagen", "name": "Basiswissen (Reaktiviert)", "status": "Reaktiviert", "expertiseSource": "P3 Experte", "requiredBloomLevel": 2},
-                        {"id": "K2-Kernkonzept", "name": "Kernkonzepte", "status": "Offen", "requiredBloomLevel": 3},
+                        {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Open", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1},
+                        {"id": "K1-Grundlagen", "name": "Basiswissen (Reaktiviert)", "status": "Reactivated", "expertiseSource": "P3 Experte", "requiredBloomLevel": 2},
+                        {"id": "K2-Kernkonzept", "name": "Kernkonzepte", "status": "Open", "requiredBloomLevel": 3},
                     ],
-                    "new_current_concept": {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Offen", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1}
+                    "new_current_concept": {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Open", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1}
                 })
-            return json.dumps({
+            elif "[ACTION: CREATE_GOAL_PATH]" in user_prompt:
+                return json.dumps({
                 "goal_contract": {
                     "name": user_prompt,
                     "fachgebiet": "Künstliche Intelligenz",
@@ -114,14 +115,14 @@ class LLMService:
                     "status": "In Arbeit"
                 },
                 "path_structure": [
-                    {"id": "K1-Grundlagen", "name": "Python/Pandas-Grundlagen", "status": "Offen", "requiredBloomLevel": 2},
-                    {"id": "K2-Kernkonzept", "name": "Einführung in Matrix-Faktorisierung", "status": "Offen", "requiredBloomLevel": 3},
-                    {"id": "K3-Implementierung", "name": "Implementierung der Empfehlungslogik", "status": "Offen", "requiredBloomLevel": 5}
+                    {"id": "K1-Grundlagen", "name": "Python/Pandas-Grundlagen", "status": "Open", "requiredBloomLevel": 2},
+                    {"id": "K2-Kernkonzept", "name": "Einführung in Matrix-Faktorisierung", "status": "Open", "requiredBloomLevel": 3},
+                    {"id": "K3-Implementierung", "name": "Implementierung der Empfehlungslogik", "status": "Open", "requiredBloomLevel": 5}
                 ]
             })
         
-        elif "KURATOR" in system_prompt:
-            if "Bewerte die Antworten des Nutzers" in user_prompt: # Simulate test evaluation
+        elif "CURATOR" in system_prompt or "KURATOR" in system_prompt:
+            if "[ACTION: EVALUATE_TEST]" in user_prompt: # Simulate test evaluation
                 return json.dumps({
                     "score": 85,
                     "passed": True,
@@ -154,7 +155,7 @@ class LLMService:
                         }
                     ]
                 })
-            elif "Testfragen" in user_prompt or "Test" in user_prompt: # Simulate test generation
+            elif "[ACTION: GENERATE_TEST]" in user_prompt: # Simulate test generation
                 return json.dumps({
                     "test_questions": [
                         {
@@ -175,25 +176,28 @@ class LLMService:
                         }
                     ]
                 })
-            
-            return """SIMULATION: KURATOR hat Material generiert.
+            elif "[ACTION: GENERATE_MATERIAL]" in user_prompt or "Generate learning material" in user_prompt:
+                return """SIMULATION: CURATOR has generated material.
 
-### MATERIAL: Einführung in Matrix-Faktorisierung
+### MATERIAL: Introduction to Matrix Factorization
 
-**Analogie-basierte Erklärung:**
-Stellen Sie sich Netflix vor. Die riesige Film-Nutzer-Matrix (Millionen von Nutzern × Tausende von Filmen) ist wie ein gigantisches Puzzle. Matrix-Faktorisierung zerlegt dieses Puzzle in zwei kleinere, handhabbare Teile:
+**Analogy-based Explanation:**
+Imagine Netflix. The huge movie-user matrix (millions of users × thousands of movies) is like a gigantic puzzle. Matrix factorization breaks this puzzle into two smaller, manageable pieces:
 
-1. **Nutzer-Merkmale-Matrix**: Was mögen Nutzer? (Action, Drama, Sci-Fi)
-2. **Film-Merkmale-Matrix**: Welche Eigenschaften haben Filme?
+1. **User-Feature Matrix**: What do users like? (Action, Drama, Sci-Fi)
+2. **Movie-Feature Matrix**: What properties do movies have?
 
-Durch diese Zerlegung können wir verborgene Muster entdecken und Empfehlungen geben, selbst wenn ein Nutzer einen Film noch nicht gesehen hat.
+By breaking it down this way, we can discover hidden patterns and make recommendations, even if a user hasn't seen a movie yet.
 
-### EXTERN VERFÜGBAR
+### EXTERNAL SOURCES
 - [Video: Matrix Factorization Explained](https://youtube.com/watch?v=example)
 - [Paper: Collaborative Filtering via Matrix Factorization](https://example.com/paper)"""
+            else:
+                # Default fallback for CURATOR - return empty test questions
+                return json.dumps({"test_questions": []})
         
-        elif "PRÜFER" in system_prompt:
-            if "Generiere einen Vorwissenstest" in user_prompt:
+        elif "ASSESSOR" in system_prompt or "PRÜFER" in system_prompt:
+            if "[ACTION: GENERATE_P2_TEST]" in user_prompt:
                 return json.dumps({
                     "questions": [
                         {"id": "pk1", "question_text": "Was ist der Unterschied zwischen Supervised und Unsupervised Learning?", "type": "free_text"},
@@ -201,7 +205,7 @@ Durch diese Zerlegung können wir verborgene Muster entdecken und Empfehlungen g
                         {"id": "pk3", "question_text": "Haben Sie bereits Erfahrung mit Matrix-Faktorisierung?", "type": "multiple_choice", "options": ["Ja", "Nein"]}
                     ]
                 })
-            elif "Bewerte die Antworten" in user_prompt:
+            elif "[ACTION: EVALUATE_P2_TEST]" in user_prompt:
                 # More realistic simulation: check if user input suggests knowledge
                 mastered = []
                 if 'Ja' in user_prompt: # Simple check on the answers string
@@ -213,7 +217,7 @@ Durch diese Zerlegung können wir verborgene Muster entdecken und Empfehlungen g
                 })
 
         elif "TUTOR" in system_prompt:
-            if "Lücken-Diagnose" in system_prompt or "Diagnose" in user_prompt:
+            if "[ACTION: DIAGNOSE_GAP]" in user_prompt:
                 return """SIMULATION: TUTOR diagnostiziert Lücke.
 
 Hallo! Ich verstehe, dass das Konzept gerade schwierig erscheint. Das ist völlig normal und passiert jedem beim Lernen. 

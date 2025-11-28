@@ -53,11 +53,13 @@ export const alisAPI = {
      * @param {string} userId - User identifier
      * @param {string} userInput - Learning goal description
      * @param {object} userProfile - User preferences
+     * @param {string} language - UI language (de/en)
      */
-    async startGoal(userId, userInput, userProfile = {}) {
+    async startGoal(userId, userInput, userProfile = {}, language = 'de') {
         return apiCall('/start_goal', {
             userId,
             userInput,
+            language,
             userProfile: {
                 stylePreference: userProfile.stylePreference || 'Analogien-basiert',
                 paceWPM: userProfile.paceWPM || 180,

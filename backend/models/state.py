@@ -29,6 +29,8 @@ class ALISState(TypedDict):
     user_input: str
     remediation_needed: bool
     user_profile: 'UserProfile'
+    next_step: Optional[str]
+    language: Optional[str]
 
 
 class ConceptDict(TypedDict, total=False):

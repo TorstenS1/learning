@@ -56,20 +56,18 @@ def should_progress(state: ALISState) -> str:
         return "goal_complete"
 
 
+def route_workflow(state: ALISState) -> str:
+    """
+    Router function to determine the entry point based on state['next_step'].
+    """
+    next_step = state.get('next_step')
+    if next_step in ["P1_P3_Goal_Path_Creation", "P4_Material_Generation", "P5_Chat_Tutor", "P5_5_Diagnosis"]:
+        return next_step
+    return "P1_P3_Goal_Path_Creation" # Default
+
 def build_alis_graph():
     """
     Builds the LangGraph state machine for ALIS.
-    
-    The workflow follows this structure:
-    1. P1/P3: Goal setting and path creation (Architekt)
-    2. P4: Material generation (Kurator)
-    3. P5: Learning phase with chat (Tutor)
-    4. P5.5: Optional remediation loop (Tutor → Architekt → back to P4)
-    5. P6: Test generation (Kurator)
-    6. P7: Test evaluation and progression (Kurator/Tutor logic)
-    
-    Returns:
-        Compiled LangGraph workflow
     """
     workflow = StateGraph(ALISState)
     
@@ -79,22 +77,43 @@ def build_alis_graph():
     workflow.add_node("P5_Chat_Tutor", process_chat)
     workflow.add_node("P5_5_Diagnosis", start_remediation_diagnosis)
     workflow.add_node("P5_5_Remediation_Execution", perform_remediation)
-    # P6 and P7 nodes are called directly by their API endpoints, not as part of this graph flow.
-    # workflow.add_node("P6_Test_Generation", generate_test)
-    # workflow.add_node("P7_Test_Evaluation", evaluate_test)
     
-    # Set entry point
-    workflow.set_entry_point("P1_P3_Goal_Path_Creation")
+    # Add a dummy start node for routing
+    def start_router(state):
+        return state
+    
+    workflow.add_node("START_ROUTER", start_router)
+    workflow.set_entry_point("START_ROUTER")
+    
+    # Add conditional edges from router to the correct start node
+    workflow.add_conditional_edges(
+        "START_ROUTER",
+        route_workflow,
+        {
+            "P1_P3_Goal_Path_Creation": "P1_P3_Goal_Path_Creation",
+            "P4_Material_Generation": "P4_Material_Generation",
+            "P5_Chat_Tutor": "P5_Chat_Tutor",
+            "P5_5_Diagnosis": "P5_5_Diagnosis"
+        }
+    )
     
     # Add edges (transitions)
     
-    # P1/P3 Flow: After goal creation, the graph should end. The frontend will trigger the next step.
+    # P1/P3 Flow: After goal creation, the graph should end.
     workflow.add_edge("P1_P3_Goal_Path_Creation", END)
     
     # P4 Flow: Material → Chat/Learning
-    workflow.add_edge("P4_Material_Generation", "P5_Chat_Tutor")
+    # Note: If we start at P4, we want to go to P5 (Chat) afterwards? 
+    # Actually, P4 generates material and returns. The frontend then calls P5 (Chat) separately if needed.
+    # But in the original graph: workflow.add_edge("P4_Material_Generation", "P5_Chat_Tutor")
+    # This implies that after generating material, we immediately enter chat mode?
+    # If get_material calls P4, and P4 goes to P5, then P5 will run with empty user input?
+    # Let's check process_chat. It uses state['user_input'].
+    # If get_material payload has no user_input (or empty), P5 might fail or do something weird.
+    # Let's keep the original edge for now, but be aware.
+    workflow.add_edge("P4_Material_Generation", END) # Changed to END to stop after material generation
     
-    # P5 Flow: Chat can lead to remediation, otherwise the graph waits for the next user action.
+    # P5 Flow: Chat can lead to remediation
     workflow.add_conditional_edges(
         "P5_Chat_Tutor",
         should_remediate,
