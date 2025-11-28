@@ -202,9 +202,14 @@ Durch diese Zerlegung können wir verborgene Muster entdecken und Empfehlungen g
                     ]
                 })
             elif "Bewerte die Antworten" in user_prompt:
+                # More realistic simulation: check if user input suggests knowledge
+                mastered = []
+                if 'Ja' in user_prompt: # Simple check on the answers string
+                    mastered.append("K1-Grundlagen")
+                
                 return json.dumps({
-                    "mastered_concepts": ["K1-Grundlagen"],
-                    "feedback": "Basierend auf Ihren Antworten scheinen Sie die Grundlagen bereits zu beherrschen. Wir überspringen das erste Kapitel."
+                    "mastered_concepts": mastered,
+                    "feedback": "Ihre Antworten wurden ausgewertet. Der Lernpfad wird angepasst."
                 })
 
         elif "TUTOR" in system_prompt:

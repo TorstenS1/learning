@@ -32,41 +32,28 @@ def should_progress(state: ALISState) -> str:
     """
     Decision point after test evaluation: Should the learner progress to the next concept,
     re-study the current concept, or end the goal? (P7 logic)
+    This function *reads* the state set by the P7_Test_Evaluation node and is robust
+    against 'current_concept' being None.
     """
     import sys
     print(f"\n--- DEBUG: should_progress called ---", file=sys.stderr)
     print(f"  state.get('test_passed'): {state.get('test_passed')}", file=sys.stderr)
     
-    if state.get('test_passed'):
-        current_concept_id = state.get('current_concept', {}).get('id')
-        path_structure = state.get('path_structure', [])
-        
-        print(f"  current_concept_id: {current_concept_id}", file=sys.stderr)
-        print(f"  len(path_structure): {len(path_structure)}", file=sys.stderr)
-        
-        if current_concept_id:
-            current_index = -1
-            for i, concept in enumerate(path_structure):
-                if concept.get('id') == current_concept_id:
-                    current_index = i
-                    break
-            
-            print(f"  current_index: {current_index}", file=sys.stderr)
-            
-            if current_index != -1 and current_index + 1 < len(path_structure):
-                # There is a next concept
-                # Set the next concept as current_concept in state for the next P4 call
-                state['current_concept'] = path_structure[current_index + 1] # <<-- CRITICAL STATE UPDATE
-                print(f"  Returning 'next_concept'. New current_concept: {state['current_concept']['name']}", file=sys.stderr)
-                return "next_concept"
-        
-        # No more concepts or current concept not found
+    if not state.get('test_passed'):
+        # Test was not passed, so re-study the current concept.
+        # The 'current_concept' in the state has not been advanced by the evaluate_test node.
+        print(f"  Returning 're_study'.", file=sys.stderr)
+        return "re_study"
+    
+    # Test was passed. Check if the evaluate_test node provided a next concept.
+    if state.get('current_concept'):
+        # The evaluate_test node has set the next concept to continue the journey.
+        print(f"  Returning 'next_concept'.", file=sys.stderr)
+        return "next_concept"
+    else:
+        # The evaluate_test node set current_concept to None, indicating the goal is complete.
         print(f"  Returning 'goal_complete'.", file=sys.stderr)
         return "goal_complete"
-    else:
-        # Test not passed, re-study current concept
-        print(f"  Returning 're_study'. Test not passed.", file=sys.stderr)
-        return "re_study"
 
 
 def build_alis_graph():
@@ -92,27 +79,28 @@ def build_alis_graph():
     workflow.add_node("P5_Chat_Tutor", process_chat)
     workflow.add_node("P5_5_Diagnosis", start_remediation_diagnosis)
     workflow.add_node("P5_5_Remediation_Execution", perform_remediation)
-    workflow.add_node("P6_Test_Generation", generate_test)
-    workflow.add_node("P7_Test_Evaluation", evaluate_test) # Add the new evaluation node
+    # P6 and P7 nodes are called directly by their API endpoints, not as part of this graph flow.
+    # workflow.add_node("P6_Test_Generation", generate_test)
+    # workflow.add_node("P7_Test_Evaluation", evaluate_test)
     
     # Set entry point
     workflow.set_entry_point("P1_P3_Goal_Path_Creation")
     
     # Add edges (transitions)
     
-    # P1/P3 Flow: Goal creation → Material generation
-    workflow.add_edge("P1_P3_Goal_Path_Creation", "P4_Material_Generation")
+    # P1/P3 Flow: After goal creation, the graph should end. The frontend will trigger the next step.
+    workflow.add_edge("P1_P3_Goal_Path_Creation", END)
     
     # P4 Flow: Material → Chat/Learning
     workflow.add_edge("P4_Material_Generation", "P5_Chat_Tutor")
     
-    # P5 Flow: Chat can lead to remediation or test
+    # P5 Flow: Chat can lead to remediation, otherwise the graph waits for the next user action.
     workflow.add_conditional_edges(
         "P5_Chat_Tutor",
         should_remediate,
         {
-            "remediate": "P5_5_Diagnosis",      # Gap reported
-            "continue": "P6_Test_Generation"    # Standard flow to test
+            "remediate": "P5_5_Diagnosis",
+            "continue": END  # Stop the graph here and wait for explicit user action
         }
     )
     
@@ -123,19 +111,7 @@ def build_alis_graph():
     # After path correction, immediately generate material for new concept (N1)
     workflow.add_edge("P5_5_Remediation_Execution", "P4_Material_Generation")
     
-    # P6 Flow: Test generation → Test Evaluation
-    workflow.add_edge("P6_Test_Generation", "P7_Test_Evaluation")
-    
-    # P7 Flow: Test Evaluation leads to progression, re-study, or end
-    workflow.add_conditional_edges(
-        "P7_Test_Evaluation",
-        should_progress,
-        {
-            "next_concept": "P4_Material_Generation", # Test passed, move to next concept
-            "goal_complete": END,                     # Test passed, no more concepts
-            "re_study": "P4_Material_Generation"      # Test not passed, re-study current concept
-        }
-    )
+    # P6/P7 (Test/Evaluation) flows are handled by direct API calls, not as part of this graph.
     
     return workflow.compile()
 

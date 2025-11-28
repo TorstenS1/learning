@@ -158,25 +158,32 @@ const App = () => {
     };
 
     const confirmPathAndStartLearning = async () => {
-        // Hier würde die Logik zur Speicherung der P3 Skips erfolgen.
-        if (!state.currentConcept) {
-            updateState({ llmOutput: 'Fehler: Es konnte kein aktives Konzept gefunden werden.' });
+        // Find the first concept that is 'Offen' or 'Reaktiviert' to start learning.
+        const firstAvailableConcept = state.pathStructure.find(
+            c => c.status === 'Offen' || c.status === 'Reaktiviert'
+        );
+
+        if (!firstAvailableConcept) {
+            // This can happen if the user skips all concepts in P3.
+            updateState({ llmOutput: 'Alle Konzepte wurden bereits abgeschlossen oder übersprungen. Lernziel erreicht!' });
+            setPhase('P7_GOAL_COMPLETE'); // Transition to a completion state.
             return;
         }
+
         updateState({ loading: true, llmOutput: 'Kurator generiert Material...' });
-        // Don't set phase here - wait for API response
 
         try {
             const result = await alisAPI.getMaterial(
                 state.userId,
                 state.goalId,
                 state.pathStructure,
-                state.currentConcept,
+                firstAvailableConcept, // Use the concept we just found
                 state.userProfile
             );
 
             updateState({
                 loading: false,
+                currentConcept: firstAvailableConcept, // Set the determined concept as current
                 llmOutput: result.data.llm_output,
                 tutorChat: [{ sender: 'System', message: 'Willkommen in der Lernphase! Fragen Sie mich alles!' }],
             });
@@ -347,20 +354,14 @@ const App = () => {
             console.log('Current concept:', result.data.current_concept);
 
             if (result.data.evaluation_result?.passed) {
-                // Check if there's a next concept in the path
-                const updatedPathStructure = result.data.path_structure;
-                const updatedCurrentConcept = result.data.current_concept;
-                const currentIndex = updatedPathStructure.findIndex(c => c.id === updatedCurrentConcept.id);
-                const hasNextConcept = currentIndex !== -1 && currentIndex + 1 < updatedPathStructure.length;
-
-                console.log('Test passed! Current index:', currentIndex, 'Has next concept:', hasNextConcept);
-
-                if (hasNextConcept) {
-                    // Move to next concept - show transition UI
+                // The backend now determines the next concept.
+                // If result.data.current_concept is null, the goal is complete.
+                if (result.data.current_concept) {
+                    // There is a next concept, show the progression screen.
                     console.log('Transitioning to P7_PROGRESSION');
                     setPhase('P7_PROGRESSION');
                 } else {
-                    // Goal complete!
+                    // No next concept, the goal is complete.
                     console.log('Transitioning to P7_GOAL_COMPLETE');
                     setPhase('P7_GOAL_COMPLETE');
                 }
@@ -414,10 +415,12 @@ const App = () => {
             );
             updateState({
                 loading: false,
-                llmOutput: result.llm_output, // Feedback
-                pathStructure: result.path_structure // Updated with skipped concepts
+                llmOutput: result.llm_output, // Feedback from the evaluation
+                pathStructure: result.path_structure, // Path updated with AI suggestions
+                parsedTestQuestions: [], // Clean up test state
+                userTestAnswers: {}      // Clean up test state
             });
-            setPhase('P3_PATH_REVIEW');
+            setPhase('P3_PATH_REVIEW'); // Go to review screen for user confirmation
         } catch (error) {
             console.error(error);
             updateState({ loading: false, llmOutput: 'Fehler bei P2 Bewertung' });
@@ -601,51 +604,71 @@ const App = () => {
         );
     };
 
-    const renderPathReviewUI = () => (
-        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
-            <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
-                <LayoutList className="mr-3 w-7 h-7" /> Lernpfad-Review (P3)
-            </h1>
-            <p className="text-gray-600 mb-6">
-                Bitte prüfen Sie den vom **Architekten** generierten Plan. Markieren Sie Konzepte, die Ihnen bereits bekannt sind, um sie zu überspringen (Experten-Review).
-            </p>
+    const renderPathReviewUI = () => {
+        const hasAvailableConcepts = state.pathStructure.some(
+            c => c.status === 'Offen' || c.status === 'Reaktiviert'
+        );
 
-            <ul className="space-y-3 mb-8">
-                {state.pathStructure.map((concept, index) => (
-                    <li key={concept.id} className={`flex items-center justify-between p-4 rounded-lg transition duration-150 ${concept.status === 'Aktiv' ? 'bg-indigo-100 border-l-4 border-indigo-600 font-semibold' :
-                        concept.status === 'Übersprungen' ? 'bg-green-50 line-through text-gray-500' :
-                            'bg-gray-50 border border-gray-200 text-gray-500'
-                        }`}>
-                        <span className="flex items-center">
-                            {index + 1}. {concept.name}
-                            {concept.status === 'Übersprungen' && <span className="ml-2 text-xs font-bold text-green-700">(Übersprungen: {concept.expertiseSource})</span>}
-                        </span>
-                        <input
-                            type="checkbox"
-                            checked={concept.status === 'Übersprungen'}
-                            onChange={() => {
-                                // Simulation der Pfad-Änderung in der UI
-                                const newPath = state.pathStructure.map(c =>
-                                    c.id === concept.id ?
-                                        { ...c, status: c.status === 'Übersprungen' ? 'Offen' : 'Übersprungen', expertiseSource: c.status === 'Übersprungen' ? null : 'P3 Experte' } : c
-                                );
-                                updateState({ pathStructure: newPath });
-                            }}
-                            className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                        />
-                    </li>
-                ))}
-            </ul>
+        return (
+            <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
+                <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
+                    <LayoutList className="mr-3 w-7 h-7" /> Lernpfad-Review (P3)
+                </h1>
+                <p className="text-gray-600 mb-6">
+                    Bitte prüfen Sie den vom **Architekten** generierten Plan. Markieren Sie Konzepte, die Ihnen bereits bekannt sind, um sie zu überspringen (Experten-Review).
+                </p>
 
-            <button
-                onClick={confirmPathAndStartLearning}
-                className="w-full flex items-center justify-center p-3 bg-green-600 text-white font-semibold rounded-lg shadow-lg hover:bg-green-700 transition duration-150"
-            >
-                {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <BookOpen className="mr-2 w-5 h-5" />}
-                Lernpfad bestätigen & Material starten
-            </button>
-        </div>
-    );
+                <ul className="space-y-3 mb-8">
+                    {state.pathStructure.map((concept, index) => (
+                        <li key={concept.id} className={`flex items-center justify-between p-4 rounded-lg transition duration-150 ${concept.status === 'Aktiv' ? 'bg-indigo-100 border-l-4 border-indigo-600 font-semibold' :
+                            concept.status === 'Übersprungen' || concept.status === 'Beherrscht' ? 'bg-green-50 line-through text-gray-500' :
+                                'bg-gray-50 border border-gray-200 text-gray-700'
+                            }`}>
+                            <span className="flex items-center">
+                                {index + 1}. {concept.name}
+                                {(concept.status === 'Übersprungen' || concept.status === 'Beherrscht') && <span className="ml-2 text-xs font-bold text-green-700">({concept.status}: {concept.expertiseSource || 'Test'})</span>}
+                            </span>
+                            <input
+                                type="checkbox"
+                                checked={concept.status === 'Übersprungen' || concept.status === 'Beherrscht'}
+                                onChange={() => {
+                                    // Path modification simulation in UI
+                                    const newPath = state.pathStructure.map(c =>
+                                        c.id === concept.id ?
+                                            { ...c, status: (c.status === 'Übersprungen' || c.status === 'Beherrscht') ? 'Offen' : 'Übersprungen', expertiseSource: (c.status === 'Übersprungen' || c.status === 'Beherrscht') ? null : 'P3 Experte' } : c
+                                    );
+                                    updateState({ pathStructure: newPath });
+                                }}
+                                className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            />
+                        </li>
+                    ))}
+                </ul>
+
+                {hasAvailableConcepts ? (
+                    <button
+                        onClick={confirmPathAndStartLearning}
+                        className="w-full flex items-center justify-center p-3 bg-green-600 text-white font-semibold rounded-lg shadow-lg hover:bg-green-700 transition duration-150"
+                        disabled={state.loading}
+                    >
+                        {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <BookOpen className="mr-2 w-5 h-5" />}
+                        Lernpfad bestätigen & Material starten
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => {
+                            updateState({ llmOutput: 'Alle Konzepte wurden bereits als bekannt markiert. Lernziel erreicht!' });
+                            setPhase('P7_GOAL_COMPLETE');
+                        }}
+                        className="w-full flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
+                    >
+                        <CheckCircle className="mr-2 w-5 h-5" />
+                        Lernziel abschließen
+                    </button>
+                )}
+            </div>
+        );
+    };
 
     const renderTestUI = () => {
         // console.log("renderTestUI: state.loading is", state.loading); // Removed DEBUG LOG
@@ -766,12 +789,17 @@ const App = () => {
 
                 <button
                     onClick={async () => {
-                        // Move to next concept
-                        const currentIndex = state.pathStructure.findIndex(c => c.id === state.currentConcept.id);
-                        const nextConcept = state.pathStructure[currentIndex + 1];
+                        // The correct next concept is already in the state from the submitTest response.
+                        const nextConcept = state.currentConcept;
+
+                        if (!nextConcept) {
+                            // This case should ideally not be reached if this UI is shown, but acts as a safeguard.
+                            console.error("P7_PROGRESSION UI was shown, but the next concept is missing from the state.");
+                            setPhase('P7_GOAL_COMPLETE');
+                            return;
+                        }
 
                         updateState({
-                            currentConcept: nextConcept,
                             loading: true,
                             llmOutput: 'Kurator generiert Material für das nächste Konzept...'
                         });
@@ -789,6 +817,7 @@ const App = () => {
                                 loading: false,
                                 llmOutput: result.data.llm_output,
                                 tutorChat: [{ sender: 'System', message: `Willkommen beim Konzept: ${nextConcept.name}!` }],
+                                testEvaluationResult: null // Clear results from the previous test
                             });
                             setPhase('P5_LEARNING');
                         } catch (error) {

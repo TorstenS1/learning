@@ -44,92 +44,60 @@ def create_goal_path(state: ALISState) -> ALISState:
     new_goal: Optional[Goal] = None
     new_path_structure: List[ConceptDict] = []
     
-    if llm.use_simulation:
-        # Simulation logic
-        goal_id = str(ObjectId()) # Generate a new ObjectId for the simulated goal
+    # Parse JSON output from LLM for both real and simulated API calls
+    try:
+        # Architekt is instructed to respond in JSON format
+        parsed_result = json.loads(llm_result)
+        
+        goal_contract = parsed_result.get('goal_contract', {})
+        path_structure_data = parsed_result.get('path_structure', [])
+        
+        goal_id = str(ObjectId()) # Generate a new ObjectId for the goal
         new_goal = Goal(
             goalId=goal_id,
-            name=state['user_input'],
-            fachgebiet="Simuliert",
-            targetDate="2025-12-31",
-            bloomLevel=3,
-            messMetrik="Erfolgreich simulierte Lernschritte",
-            status="In Arbeit"
+            name=goal_contract.get('name', state['user_input']),
+            fachgebiet=goal_contract.get('fachgebiet', "Unbekannt"),
+            targetDate=goal_contract.get('targetDate', "N/A"),
+            bloomLevel=goal_contract.get('bloomLevel', 1),
+            messMetrik=goal_contract.get('messMetrik', "N/A"),
+            status=goal_contract.get('status', "In Arbeit")
         )
-        new_path_structure = [
-            ConceptDict(
-                id="K1-Grundlagen",
-                name="Basiswissen (Übersprungen)",
-                status="Übersprungen",
-                expertiseSource="P3 Experte",
-                requiredBloomLevel=2
-            ),
-            ConceptDict(
-                id="K2-Kernkonzept",
-                name="Kernkonzepte",
-                status="Offen",
-                requiredBloomLevel=3
-            ),
-        ]
-        state['current_concept'] = new_path_structure[1]
+        
+        new_path_structure = [ConceptDict(**c) for c in path_structure_data]
+        
         state['goal_id'] = goal_id
         state['goal'] = new_goal
         state['path_structure'] = new_path_structure
-    else:
-        # Parse JSON output from LLM for real API calls
-        try:
-            # Architekt is instructed to respond in JSON format
-            parsed_result = json.loads(llm_result)
-            
-            goal_contract = parsed_result.get('goal_contract', {})
-            path_structure_data = parsed_result.get('path_structure', [])
-            
-            goal_id = str(ObjectId()) # Generate a new ObjectId for the goal
-            new_goal = Goal(
-                goalId=goal_id,
-                name=goal_contract.get('name', state['user_input']),
-                fachgebiet=goal_contract.get('fachgebiet', "Unbekannt"),
-                targetDate=goal_contract.get('targetDate', "N/A"),
-                bloomLevel=goal_contract.get('bloomLevel', 1),
-                messMetrik=goal_contract.get('messMetrik', "N/A"),
-                status=goal_contract.get('status', "In Arbeit")
-            )
-            
-            new_path_structure = [ConceptDict(**c) for c in path_structure_data]
-            
-            state['goal_id'] = goal_id
-            state['goal'] = new_goal
-            state['path_structure'] = new_path_structure
-            
-            # Find the first open concept or default to the first in the path
-            state['current_concept'] = next(
-                (c for c in new_path_structure if c.get('status') == 'Offen'),
-                new_path_structure[0] if new_path_structure else None
-            )
-                 
-        except Exception as e:
-            print(f"Error parsing LLM output in create_goal_path: {e}")
-            # Fallback to a safe default to prevent crash
-            goal_id = str(ObjectId())
-            new_goal = Goal(
-                goalId=goal_id,
-                name=state['user_input'],
-                fachgebiet="Fallback",
-                targetDate="N/A",
-                bloomLevel=1,
-                messMetrik="N/A",
-                status="In Arbeit"
-            )
-            new_path_structure = [ConceptDict(
-                id="K1-Fallback",
-                name=state['user_input'],
-                status="Offen",
-                requiredBloomLevel=1
-            )]
-            state['goal_id'] = goal_id
-            state['goal'] = new_goal
-            state['path_structure'] = new_path_structure
-            state['current_concept'] = new_path_structure[0]
+        
+        # Find the first open concept or default to the first in the path
+        state['current_concept'] = next(
+            (c for c in new_path_structure if c.get('status') == 'Offen'),
+            new_path_structure[0] if new_path_structure else None
+        )
+             
+    except Exception as e:
+        print(f"Error parsing LLM output in create_goal_path: {e}")
+        # Fallback to a safe default to prevent crash
+        goal_id = str(ObjectId())
+        new_goal = Goal(
+            goalId=goal_id,
+            name=state['user_input'],
+            fachgebiet="Fallback",
+            targetDate="N/A",
+            bloomLevel=1,
+            messMetrik="N/A",
+            status="In Arbeit"
+        )
+        new_path_structure = [ConceptDict(
+            id="K1-Fallback",
+            name=state['user_input'],
+            status="Offen",
+            requiredBloomLevel=1
+        )]
+        state['goal_id'] = goal_id
+        state['goal'] = new_goal
+        state['path_structure'] = new_path_structure
+        state['current_concept'] = new_path_structure[0]
 
     # Save UserProfile if it's new or updated (assuming user_id already exists in state)
     # For now, we only update it, future will fetch and then update
@@ -480,6 +448,33 @@ def evaluate_test(state: ALISState) -> ALISState:
                     concept['status'] = new_concept_status
                     break
 
+        # This is where the automated progression logic (P7) happens.
+        if passed:
+            # Find the index of the now-completed concept
+            current_index = -1
+            for i, concept in enumerate(state['path_structure']):
+                if concept.get('id') == current_concept['id']:
+                    current_index = i
+                    break
+            
+            # Find the next 'Offen' or 'Reaktiviert' concept in the path
+            next_concept = None
+            if current_index != -1:
+                for i in range(current_index + 1, len(state['path_structure'])):
+                    concept_in_path = state['path_structure'][i]
+                    if concept_in_path.get('status') in ['Offen', 'Reaktiviert']:
+                        next_concept = concept_in_path
+                        break
+            
+            if next_concept:
+                # We found the next concept, update the current_concept in the state
+                state['current_concept'] = next_concept
+            else:
+                # No next concept found, the goal is complete
+                state['current_concept'] = None # Signal to UI that goal is complete
+                # Here you could also update the overall Goal status in the DB
+                # e.g., db.update_goal_status(goal_id, "Abgeschlossen")
+        
     # Update UserProfile with testScore (P7 logic)
     # For a full P7, we'd fetch the user profile, update it, and save it back.
     # For now, we update the state's user_profile and save it implicitly (if create_goal_path is called again).
