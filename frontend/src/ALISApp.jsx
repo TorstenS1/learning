@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Zap, LayoutList, BookOpen, MessageCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Loader2, Zap, LayoutList, BookOpen, MessageCircle, AlertTriangle, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 import alisAPI from './services/alisAPI';
 
 // ==============================================================================
@@ -24,9 +24,80 @@ const App = () => {
         userProfile: { stylePreference: 'Analogien-basiert', paceWPM: 180 },
         loading: false,
         tutorChat: [],
+        parsedTestQuestions: [], // New state to store parsed test questions
+        userTestAnswers: {},    // New state to store user's answers
+        testEvaluationResult: null, // New state for evaluation results
     });
 
     const updateState = (updates) => setState(s => ({ ...s, ...updates }));
+
+    // Prevent accidental browser back navigation during learning session
+    useEffect(() => {
+        const handlePopState = (e) => {
+            e.preventDefault();
+            const confirmLeave = window.confirm(
+                'Möchten Sie wirklich die Lernumgebung verlassen? Ihr Fortschritt könnte verloren gehen.'
+            );
+            if (!confirmLeave) {
+                window.history.pushState(null, '', window.location.href);
+            }
+        };
+
+        // Push initial state
+        window.history.pushState(null, '', window.location.href);
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, []);
+
+    // Debug Render Cycle
+    console.log('--- RENDER CYCLE ---');
+    console.log('Current Phase:', phase);
+    console.log('Loading:', state.loading);
+    console.log('Test Result:', state.testEvaluationResult);
+
+    // Helper to parse LLM output for test questions
+    useEffect(() => {
+        if (phase === 'P6_TEST_PHASE' && state.llmOutput) {
+            try {
+                // Assuming llmOutput is a JSON string with a 'test_questions' key
+                const parsed = JSON.parse(state.llmOutput);
+                if (parsed.test_questions && Array.isArray(parsed.test_questions)) {
+                    updateState({ parsedTestQuestions: parsed.test_questions });
+                    // Initialize userTestAnswers
+                    const initialAnswers = {};
+                    parsed.test_questions.forEach((q, index) => {
+                        initialAnswers[q.id || `q${index}`] = q.type === 'multiple_choice' ? '' : '';
+                    });
+                    updateState({ userTestAnswers: initialAnswers });
+                } else {
+                    console.warn("LLM output for test questions did not contain 'test_questions' array:", parsed);
+                    updateState({ parsedTestQuestions: [] });
+                }
+            } catch (e) {
+                console.error("Error parsing test questions LLM output:", e);
+                updateState({ parsedTestQuestions: [] });
+            }
+        } else if (phase !== 'P6_TEST_PHASE' && !phase.startsWith('P7_')) {
+            // Clear test-related states when leaving P6 (but keep them for P7 evaluation display)
+            if (state.parsedTestQuestions.length > 0 || Object.keys(state.userTestAnswers).length > 0) {
+                // Don't clear testEvaluationResult here, as it might be needed for P7
+                updateState({ parsedTestQuestions: [], userTestAnswers: {} });
+            }
+        }
+    }, [phase, state.llmOutput]);
+
+    // Handle user input for test questions
+    const handleAnswerChange = (questionId, value) => {
+        // Correctly construct the new userTestAnswers object and pass it to updateState
+        const newAnswers = {
+            ...state.userTestAnswers,
+            [questionId]: value,
+        };
+        updateState({ userTestAnswers: newAnswers });
+    };
 
     // ==============================================================================
     // 3. WICHTIGE WORKFLOW-FUNKTIONEN
@@ -66,7 +137,7 @@ const App = () => {
             return;
         }
         updateState({ loading: true, llmOutput: 'Kurator generiert Material...' });
-        setPhase('P4_MATERIAL_GENERATION');
+        // Don't set phase here - wait for API response
 
         try {
             const result = await alisAPI.getMaterial(
@@ -217,6 +288,69 @@ const App = () => {
         }
     };
 
+    const submitTest = async () => {
+        if (!state.currentConcept || !state.parsedTestQuestions.length) {
+            updateState({ llmOutput: 'Fehler: Keine Testfragen oder kein aktives Konzept zum Bewerten vorhanden.' });
+            return;
+        }
+        updateState({ loading: true, llmOutput: '{ "test_questions": ' + JSON.stringify(state.parsedTestQuestions) + ' }' });
+
+        try {
+            const result = await alisAPI.submitTest(
+                state.userId,
+                state.goalId,
+                state.currentConcept,
+                state.parsedTestQuestions, // Original questions sent for context
+                state.userTestAnswers,
+                state.pathStructure // Pass current path structure so backend can return it
+            );
+
+            updateState({
+                loading: false,
+                llmOutput: result.data.llm_output, // LLM's evaluation output
+                testEvaluationResult: result.data.evaluation_result, // Structured evaluation
+                pathStructure: result.data.path_structure, // Updated path with concept status
+                currentConcept: result.data.current_concept, // May be updated if moving to next concept
+            });
+
+            // P7 Adaption Logic: Decide next phase based on evaluation result
+            // Use result.data values directly to avoid race condition with state updates
+            console.log('Test evaluation result:', result.data.evaluation_result);
+            console.log('Path structure:', result.data.path_structure);
+            console.log('Current concept:', result.data.current_concept);
+
+            if (result.data.evaluation_result?.passed) {
+                // Check if there's a next concept in the path
+                const updatedPathStructure = result.data.path_structure;
+                const updatedCurrentConcept = result.data.current_concept;
+                const currentIndex = updatedPathStructure.findIndex(c => c.id === updatedCurrentConcept.id);
+                const hasNextConcept = currentIndex !== -1 && currentIndex + 1 < updatedPathStructure.length;
+
+                console.log('Test passed! Current index:', currentIndex, 'Has next concept:', hasNextConcept);
+
+                if (hasNextConcept) {
+                    // Move to next concept - show transition UI
+                    console.log('Transitioning to P7_PROGRESSION');
+                    setPhase('P7_PROGRESSION');
+                } else {
+                    // Goal complete!
+                    console.log('Transitioning to P7_GOAL_COMPLETE');
+                    setPhase('P7_GOAL_COMPLETE');
+                }
+            } else {
+                // Test failed - show remediation options
+                console.log('Test failed! Transitioning to P7_REMEDIATION_CHOICE');
+                setPhase('P7_REMEDIATION_CHOICE');
+            }
+        } catch (error) {
+            updateState({
+                loading: false,
+                llmOutput: `Fehler beim Bewerten des Tests: ${error.message}`
+            });
+        }
+    };
+
+
     // ==============================================================================
     // 4. RENDERING DER PHASEN
     // ==============================================================================
@@ -277,7 +411,7 @@ const App = () => {
                         value={state.userInput}
                         onChange={(e) => updateState({ userInput: e.target.value })}
                         onKeyPress={(e) => e.key === 'Enter' && handleChatOrRemediationInput()}
-                        className="flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white"
                         disabled={state.loading}
                     />
                     <button
@@ -369,28 +503,292 @@ const App = () => {
         </div>
     );
 
-    const renderTestUI = () => (
-        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-3xl mx-auto my-10">
-            <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
-                <Zap className="mr-3 w-7 h-7" /> Test (P6)
-            </h1>
-            <p className="text-gray-600 mb-6">
-                Der **Kurator** hat Testfragen für das Konzept "{state.currentConcept?.name}" generiert.
-            </p>
-            <div className="p-6 bg-gray-50 text-blue-600 border border-gray-200 rounded-xl shadow-inner min-h-[300px]">
-                {state.loading ? (
-                    <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-indigo-500" /></div>
+    const renderTestUI = () => {
+        // console.log("renderTestUI: state.loading is", state.loading); // Removed DEBUG LOG
+        console.log("renderTestUI: state.userTestAnswers", state.userTestAnswers); // DEBUG LOG
+        console.log("renderTestUI: state.parsedTestQuestions", state.parsedTestQuestions); // DEBUG LOG
+        return (
+            <div className="p-8 bg-white rounded-xl shadow-2xl max_w-3xl mx-auto my-10">
+                <h1 className="text-3xl font-extrabold text-indigo-700 mb-6 flex items-center">
+                    <Zap className="mr-3 w-7 h-7" /> Test (P6)
+                </h1>
+                <p className="text-gray-600 mb-6">
+                    Der **Kurator** hat Testfragen für das Konzept "{state.currentConcept?.name}" generiert. Bitte beantworten Sie die Fragen:
+                </p>
+                {state.parsedTestQuestions.length > 0 ? (
+                    <div className="space-y-6">
+                        {state.parsedTestQuestions.map((q, qIndex) => (
+                            <div key={q.id || `q${qIndex}`} className="p-4 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg">
+                                <p className="font-semibold text-gray-800 mb-2">{qIndex + 1}. {q.question_text}</p>
+                                {q.type === 'multiple_choice' ? (
+                                    <div className="space-y-2 ml-4">
+                                        {q.options && q.options.map((option, oIndex) => (
+                                            <label key={oIndex} className="flex items-center">
+                                                <input
+                                                    type="radio"
+                                                    name={`question - ${q.id || `q${qIndex}`}`}
+                                                    value={option}
+                                                    checked={state.userTestAnswers[q.id || `q${qIndex}`] === option}
+                                                    onChange={(e) => handleAnswerChange(q.id || `q${qIndex}`, e.target.value)}
+                                                    className="form-radio text-indigo-600 h-4 w-4"
+                                                />
+                                                <span className="ml-2">{option}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                ) : ( // Default to free_text
+                                    <textarea
+                                        className="w-full p-3 mt-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[80px] text-gray-900 bg-white"
+                                        placeholder="Ihre Antwort..."
+                                        value={state.userTestAnswers[q.id || `q${qIndex}`] || ''}
+                                        onChange={(e) => handleAnswerChange(q.id || `q${qIndex}`, e.target.value)}
+                                    />)}
+                            </div>
+                        ))}
+                    </div>
                 ) : (
-                    <div className="prose max-w-none " dangerouslySetInnerHTML={{ __html: state.llmOutput.replace(/\n/g, '<br/>') }} />
+                    <p className="text-red-500">Es konnten keine Testfragen geladen werden oder das Format ist ungültig.</p>
                 )}
+
+                <button
+                    onClick={submitTest}
+                    className="w-full mt-6 flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-400"
+                    disabled={state.loading}
+                >                        {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <CheckCircle className="mr-2 w-5 h-5" />}
+                    Test abschließen & bewerten
+                </button>
             </div>
-            {/* Hier könnten später Eingabefelder für Antworten und ein "Test abschließen" Button folgen */}
-            <button
-                onClick={() => { /* Logik für Test abschicken/bewerten */ alert('Test abschicken (Funktionalität noch nicht implementiert)'); }}
-                className="w-full mt-6 flex items-center justify-center p-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
-            >
-                Test abschließen & bewerten
-            </button>
+        );
+    };
+
+    // ==============================================================================
+    // P7: ADAPTION & PROGRESSION UIs
+    // ==============================================================================
+
+    const renderQuestionResults = () => {
+        if (!state.testEvaluationResult?.question_results?.length) return null;
+
+        return (
+            <div className="mt-8 text-left">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Detaillierte Auswertung:</h3>
+                <div className="space-y-4">
+                    {state.testEvaluationResult.question_results.map((result, index) => (
+                        <div key={index} className={`p-4 rounded-lg border ${result.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                            <div className="flex items-start">
+                                <div className="flex-shrink-0 mt-1">
+                                    {result.is_correct ? <CheckCircle className="w-5 h-5 text-green-600" /> : <XCircle className="w-5 h-5 text-red-600" />}
+                                </div>
+                                <div className="ml-3">
+                                    <p className="font-semibold text-gray-900">{result.question_text}</p>
+                                    <p className="text-sm mt-1">
+                                        <span className="font-medium">Ihre Antwort:</span> {result.user_answer}
+                                    </p>
+                                    {!result.is_correct && (
+                                        <p className="text-sm mt-1 text-green-700">
+                                            <span className="font-medium">Richtige Antwort:</span> {result.correct_answer}
+                                        </p>
+                                    )}
+                                    <p className="text-sm mt-2 text-gray-600 italic">
+                                        {result.explanation}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const renderProgressionUI = () => (
+        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-2xl mx-auto my-20">
+            <div className="text-center">
+                <CheckCircle className="w-20 h-20 text-green-600 mx-auto mb-4" />
+                <h1 className="text-3xl font-extrabold text-green-700 mb-4">
+                    🎉 Glückwunsch! Test bestanden!
+                </h1>
+                <p className="text-gray-600 mb-6">
+                    Sie haben das Konzept <strong>"{state.currentConcept?.name}"</strong> erfolgreich gemeistert.
+                </p>
+
+                {state.testEvaluationResult && (
+                    <div className="bg-green-50 p-4 rounded-lg mb-6">
+                        <p className="text-lg font-semibold">Score: {state.testEvaluationResult.score}%</p>
+                        <p className="text-gray-700 mt-2">{state.testEvaluationResult.feedback}</p>
+                    </div>
+                )}
+
+                {renderQuestionResults()}
+
+                <button
+                    onClick={async () => {
+                        // Move to next concept
+                        const currentIndex = state.pathStructure.findIndex(c => c.id === state.currentConcept.id);
+                        const nextConcept = state.pathStructure[currentIndex + 1];
+
+                        updateState({
+                            currentConcept: nextConcept,
+                            loading: true,
+                            llmOutput: 'Kurator generiert Material für das nächste Konzept...'
+                        });
+
+                        try {
+                            const result = await alisAPI.getMaterial(
+                                state.userId,
+                                state.goalId,
+                                state.pathStructure,
+                                nextConcept,
+                                state.userProfile
+                            );
+
+                            updateState({
+                                loading: false,
+                                llmOutput: result.data.llm_output,
+                                tutorChat: [{ sender: 'System', message: `Willkommen beim Konzept: ${nextConcept.name}!` }],
+                            });
+                            setPhase('P5_LEARNING');
+                        } catch (error) {
+                            updateState({
+                                loading: false,
+                                llmOutput: `Fehler: ${error.message}`
+                            });
+                        }
+                    }}
+                    className="w-full flex items-center justify-center p-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
+                    disabled={state.loading}
+                >
+                    {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <ArrowRight className="mr-2 w-5 h-5" />}
+                    Weiter zum nächsten Konzept
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderGoalCompleteUI = () => (
+        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-2xl mx-auto my-20">
+            <div className="text-center">
+                <CheckCircle className="w-24 h-24 text-green-600 mx-auto mb-6 animate-bounce" />
+                <h1 className="text-4xl font-extrabold text-green-700 mb-4">
+                    🏆 Lernziel erreicht!
+                </h1>
+                <p className="text-xl text-gray-600 mb-6">
+                    Herzlichen Glückwunsch! Sie haben alle Konzepte erfolgreich abgeschlossen.
+                </p>
+
+                {state.testEvaluationResult && (
+                    <div className="bg-green-50 p-6 rounded-lg mb-6">
+                        <p className="text-lg font-semibold mb-2">Letzter Test:</p>
+                        <p className="text-2xl font-bold text-green-700">{state.testEvaluationResult.score}%</p>
+                        <p className="text-gray-700 mt-2">{state.testEvaluationResult.feedback}</p>
+                    </div>
+                )}
+
+                {renderQuestionResults()}
+
+                <div className="space-y-3">
+                    <button
+                        onClick={() => {
+                            setPhase('P1_GOAL_SETTING');
+                            setGoalInput('');
+                            updateState({
+                                goalId: null,
+                                pathStructure: [],
+                                currentConcept: null,
+                                llmOutput: "Definieren Sie Ihr Lernziel, um den Architekten zu starten.",
+                                tutorChat: [],
+                                testEvaluationResult: null
+                            });
+                        }}
+                        className="w-full flex items-center justify-center p-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
+                    >
+                        <Zap className="mr-2 w-5 h-5" />
+                        Neues Lernziel starten
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderRemediationChoiceUI = () => (
+        <div className="p-8 bg-white rounded-xl shadow-2xl max-w-2xl mx-auto my-20">
+            <div className="text-center">
+                <XCircle className="w-20 h-20 text-red-600 mx-auto mb-4" />
+                <h1 className="text-3xl font-extrabold text-red-700 mb-4">
+                    Test nicht bestanden
+                </h1>
+                <p className="text-gray-600 mb-6">
+                    Keine Sorge! Lernen ist ein Prozess. Wählen Sie, wie Sie fortfahren möchten:
+                </p>
+
+                {state.testEvaluationResult && (
+                    <div className="bg-red-50 p-4 rounded-lg mb-6">
+                        <p className="text-lg font-semibold">Score: {state.testEvaluationResult.score}%</p>
+                        <p className="text-gray-700 mt-2">{state.testEvaluationResult.feedback}</p>
+                        {state.testEvaluationResult.recommendation && (
+                            <p className="text-gray-800 mt-2 font-semibold">
+                                💡 Empfehlung: {state.testEvaluationResult.recommendation}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {renderQuestionResults()}
+
+                <div className="space-y-3">
+                    <button
+                        onClick={async () => {
+                            // Re-study current concept
+                            updateState({ loading: true, llmOutput: 'Material wird neu geladen...' });
+
+                            try {
+                                const result = await alisAPI.getMaterial(
+                                    state.userId,
+                                    state.goalId,
+                                    state.pathStructure,
+                                    state.currentConcept,
+                                    state.userProfile
+                                );
+
+                                updateState({
+                                    loading: false,
+                                    llmOutput: result.data.llm_output,
+                                    tutorChat: [{ sender: 'System', message: 'Lassen Sie uns das Konzept noch einmal durchgehen!' }],
+                                    testEvaluationResult: null
+                                });
+                                setPhase('P5_LEARNING');
+                            } catch (error) {
+                                updateState({
+                                    loading: false,
+                                    llmOutput: `Fehler: ${error.message}`
+                                });
+                            }
+                        }}
+                        className="w-full flex items-center justify-center p-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150"
+                        disabled={state.loading}
+                    >
+                        {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <BookOpen className="mr-2 w-5 h-5" />}
+                        Konzept wiederholen
+                    </button>
+
+                    <button
+                        onClick={() => {
+                            setPhase('P5_LEARNING');
+                            updateState({
+                                remediationNeeded: true,
+                                testEvaluationResult: null,
+                                tutorChat: [...state.tutorChat, {
+                                    sender: 'System',
+                                    message: 'Nutzen Sie den "Fundament fehlt"-Button, um fehlende Grundlagen zu identifizieren.'
+                                }]
+                            });
+                        }}
+                        className="w-full flex items-center justify-center p-4 bg-yellow-600 text-white font-semibold rounded-lg shadow-lg hover:bg-yellow-700 transition duration-150"
+                    >
+                        <AlertTriangle className="mr-2 w-5 h-5" />
+                        Grundlagen-Lücke melden (P5.5)
+                    </button>
+                </div>
+            </div>
         </div>
     );
 
@@ -404,8 +802,13 @@ const App = () => {
             {phase === 'P3_PATH_REVIEW' && renderPathReviewUI()}
             {phase === 'P5_LEARNING' && renderLearningUI()}
             {phase === 'P6_TEST_PHASE' && renderTestUI()}
+            {phase === 'P7_PROGRESSION' && renderProgressionUI()}
+            {phase === 'P7_GOAL_COMPLETE' && renderGoalCompleteUI()}
+            {phase === 'P7_REMEDIATION_CHOICE' && renderRemediationChoiceUI()}
         </div>
     );
 };
+
+
 
 export default App;

@@ -1,7 +1,4 @@
-"""
-LangGraph workflow definition for ALIS.
-Orchestrates the flow between different agent nodes.
-"""
+import math
 from langgraph.graph import StateGraph, END
 
 from backend.models.state import ALISState
@@ -11,7 +8,8 @@ from backend.agents.nodes import (
     start_remediation_diagnosis,
     perform_remediation,
     process_chat,
-    generate_test
+    generate_test,
+    evaluate_test # Import the new evaluate_test node
 )
 
 
@@ -30,6 +28,47 @@ def should_remediate(state: ALISState) -> str:
     return "continue"
 
 
+def should_progress(state: ALISState) -> str:
+    """
+    Decision point after test evaluation: Should the learner progress to the next concept,
+    re-study the current concept, or end the goal? (P7 logic)
+    """
+    import sys
+    print(f"\n--- DEBUG: should_progress called ---", file=sys.stderr)
+    print(f"  state.get('test_passed'): {state.get('test_passed')}", file=sys.stderr)
+    
+    if state.get('test_passed'):
+        current_concept_id = state.get('current_concept', {}).get('id')
+        path_structure = state.get('path_structure', [])
+        
+        print(f"  current_concept_id: {current_concept_id}", file=sys.stderr)
+        print(f"  len(path_structure): {len(path_structure)}", file=sys.stderr)
+        
+        if current_concept_id:
+            current_index = -1
+            for i, concept in enumerate(path_structure):
+                if concept.get('id') == current_concept_id:
+                    current_index = i
+                    break
+            
+            print(f"  current_index: {current_index}", file=sys.stderr)
+            
+            if current_index != -1 and current_index + 1 < len(path_structure):
+                # There is a next concept
+                # Set the next concept as current_concept in state for the next P4 call
+                state['current_concept'] = path_structure[current_index + 1] # <<-- CRITICAL STATE UPDATE
+                print(f"  Returning 'next_concept'. New current_concept: {state['current_concept']['name']}", file=sys.stderr)
+                return "next_concept"
+        
+        # No more concepts or current concept not found
+        print(f"  Returning 'goal_complete'.", file=sys.stderr)
+        return "goal_complete"
+    else:
+        # Test not passed, re-study current concept
+        print(f"  Returning 're_study'. Test not passed.", file=sys.stderr)
+        return "re_study"
+
+
 def build_alis_graph():
     """
     Builds the LangGraph state machine for ALIS.
@@ -40,6 +79,7 @@ def build_alis_graph():
     3. P5: Learning phase with chat (Tutor)
     4. P5.5: Optional remediation loop (Tutor → Architekt → back to P4)
     5. P6: Test generation (Kurator)
+    6. P7: Test evaluation and progression (Kurator/Tutor logic)
     
     Returns:
         Compiled LangGraph workflow
@@ -53,6 +93,7 @@ def build_alis_graph():
     workflow.add_node("P5_5_Diagnosis", start_remediation_diagnosis)
     workflow.add_node("P5_5_Remediation_Execution", perform_remediation)
     workflow.add_node("P6_Test_Generation", generate_test)
+    workflow.add_node("P7_Test_Evaluation", evaluate_test) # Add the new evaluation node
     
     # Set entry point
     workflow.set_entry_point("P1_P3_Goal_Path_Creation")
@@ -82,8 +123,19 @@ def build_alis_graph():
     # After path correction, immediately generate material for new concept (N1)
     workflow.add_edge("P5_5_Remediation_Execution", "P4_Material_Generation")
     
-    # P6 Flow: Test ends the cycle for this concept
-    workflow.add_edge("P6_Test_Generation", END)
+    # P6 Flow: Test generation → Test Evaluation
+    workflow.add_edge("P6_Test_Generation", "P7_Test_Evaluation")
+    
+    # P7 Flow: Test Evaluation leads to progression, re-study, or end
+    workflow.add_conditional_edges(
+        "P7_Test_Evaluation",
+        should_progress,
+        {
+            "next_concept": "P4_Material_Generation", # Test passed, move to next concept
+            "goal_complete": END,                     # Test passed, no more concepts
+            "re_study": "P4_Material_Generation"      # Test not passed, re-study current concept
+        }
+    )
     
     return workflow.compile()
 

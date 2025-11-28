@@ -94,40 +94,87 @@ class LLMService:
         # Determine agent role from system prompt
         if "ARCHITEKT" in system_prompt:
             if "Pfad-Chirurgie" in user_prompt or "Pfad-Chirurgie" in system_prompt:
-                return "SIMULATION: ARCHITEKT hat Pfad korrigiert. Neues Konzept: N1: Fundamentale Basis."
-            return """SIMULATION: ARCHITEKT hat SMART-Vertrag und Pfadstruktur erstellt.
-
-### LERNZIEL-VERTRAG
-Das Ziel wurde standardisiert:
-- **S**pezifisch: Implementierung eines KI-Empfehlungssystems
-- **M**essbar: Funktionierende Testsuite mit 95% Code-Coverage
-- **A**ttraktiv: Praxisrelevantes Projekt
-- **R**ealistisch: Mit Python und vorhandenen Bibliotheken
-- **T**erminiert: 4 Wochen Lernzeit
-
-### INITIALER LERNPFAD
-1. Python/Pandas-Grundlagen (Bloom 2)
-2. Einführung in Matrix-Faktorisierung (Bloom 3)
-3. Implementierung der Empfehlungslogik (Bloom 5)"""
+                # Simulate path surgery LLM output
+                # This should return the new path_structure and current_concept in JSON
+                return json.dumps({
+                    "path_structure": [
+                        {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Offen", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1},
+                        {"id": "K1-Grundlagen", "name": "Basiswissen (Reaktiviert)", "status": "Reaktiviert", "expertiseSource": "P3 Experte", "requiredBloomLevel": 2},
+                        {"id": "K2-Kernkonzept", "name": "Kernkonzepte", "status": "Offen", "requiredBloomLevel": 3},
+                    ],
+                    "new_current_concept": {"id": "N1-Fundamentale Basis", "name": "Fundamentale Basis", "status": "Offen", "expertiseSource": "P5.5 Remediation", "requiredBloomLevel": 1}
+                })
+            return json.dumps({
+                "goal_contract": {
+                    "name": user_prompt,
+                    "fachgebiet": "Künstliche Intelligenz",
+                    "targetDate": "2025-12-31",
+                    "bloomLevel": 3,
+                    "messMetrik": "95% Code-Coverage",
+                    "status": "In Arbeit"
+                },
+                "path_structure": [
+                    {"id": "K1-Grundlagen", "name": "Python/Pandas-Grundlagen", "status": "Offen", "requiredBloomLevel": 2},
+                    {"id": "K2-Kernkonzept", "name": "Einführung in Matrix-Faktorisierung", "status": "Offen", "requiredBloomLevel": 3},
+                    {"id": "K3-Implementierung", "name": "Implementierung der Empfehlungslogik", "status": "Offen", "requiredBloomLevel": 5}
+                ]
+            })
         
         elif "KURATOR" in system_prompt:
-            if "Testfragen" in user_prompt or "Test" in user_prompt:
-                return """SIMULATION: KURATOR hat Testfragen generiert.
-
-### TESTFRAGEN
-
-**Frage 1 (Multiple Choice - Bloom 3: Anwenden)**
-Welche der folgenden Methoden eignet sich am besten für kollaboratives Filtern?
-a) K-Means Clustering
-b) Matrix-Faktorisierung ✓
-c) Lineare Regression
-d) Entscheidungsbäume
-
-**Frage 2 (Freitext - Bloom 4: Analysieren)**
-Erklären Sie, warum Matrix-Faktorisierung bei dünn besetzten Matrizen effizienter ist als direkte Ähnlichkeitsberechnungen.
-
-**Frage 3 (Anwendung - Bloom 5: Evaluieren)**
-Gegeben ist ein Datensatz mit 10.000 Nutzern und 5.000 Produkten. Bewerten Sie, ob SVD oder ALS die bessere Wahl wäre und begründen Sie Ihre Entscheidung."""
+            if "Bewerte die Antworten des Nutzers" in user_prompt: # Simulate test evaluation
+                return json.dumps({
+                    "score": 85,
+                    "passed": True,
+                    "feedback": "Sehr gut! Sie haben das Konzept verstanden und die Fragen korrekt beantwortet.",
+                    "recommendation": "Fahren Sie mit dem nächsten Konzept fort.",
+                    "question_results": [
+                        {
+                            "id": "q1",
+                            "question_text": "Welche der folgenden Methoden eignet sich am besten für kollaboratives Filtern?",
+                            "user_answer": "Matrix-Faktorisierung",
+                            "correct_answer": "Matrix-Faktorisierung",
+                            "is_correct": True,
+                            "explanation": "Matrix-Faktorisierung ist eine Standardmethode für kollaboratives Filtern."
+                        },
+                        {
+                            "id": "q2",
+                            "question_text": "Erklären Sie, warum Matrix-Faktorisierung bei dünn besetzten Matrizen effizienter ist als direkte Ähnlichkeitsberechnungen.",
+                            "user_answer": "Weil sie Dimensionen reduziert.",
+                            "correct_answer": "N/A (Freitext)",
+                            "is_correct": True,
+                            "explanation": "Korrekt, durch die Zerlegung in latente Faktoren wird die Dimensionalität reduziert und die Dünnbesetztheit umgangen."
+                        },
+                        {
+                            "id": "q3",
+                            "question_text": "Gegeben ist ein Datensatz mit 10.000 Nutzern und 5.000 Produkten. Bewerten Sie, ob SVD oder ALS die bessere Wahl wäre...",
+                            "user_answer": "SVD",
+                            "correct_answer": "ALS (Alternating Least Squares)",
+                            "is_correct": False,
+                            "explanation": "Bei explizitem Feedback ist SVD gut, aber bei großen, dünnen Matrizen ist ALS oft skalierbarer und parallelisierbar."
+                        }
+                    ]
+                })
+            elif "Testfragen" in user_prompt or "Test" in user_prompt: # Simulate test generation
+                return json.dumps({
+                    "test_questions": [
+                        {
+                            "id": "q1",
+                            "question_text": "Welche der folgenden Methoden eignet sich am besten für kollaboratives Filtern?",
+                            "type": "multiple_choice",
+                            "options": ["K-Means Clustering", "Matrix-Faktorisierung", "Lineare Regression", "Entscheidungsbäume"]
+                        },
+                        {
+                            "id": "q2",
+                            "question_text": "Erklären Sie, warum Matrix-Faktorisierung bei dünn besetzten Matrizen effizienter ist als direkte Ähnlichkeitsberechnungen.",
+                            "type": "free_text"
+                        },
+                        {
+                            "id": "q3",
+                            "question_text": "Gegeben ist ein Datensatz mit 10.000 Nutzern und 5.000 Produkten. Bewerten Sie, ob SVD oder ALS die bessere Wahl wäre und begründen Sie Ihre Entscheidung.",
+                            "type": "free_text"
+                        }
+                    ]
+                })
             
             return """SIMULATION: KURATOR hat Material generiert.
 

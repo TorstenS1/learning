@@ -1,181 +1,153 @@
-"""
-Database service for Firestore operations.
-Provides both real Firestore client and simulator for development.
-"""
-from typing import Dict, Any, Optional
-import json
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, PyMongoError
+from bson.objectid import ObjectId
+from typing import Optional, Dict, Any, List
+
+from backend.config.settings import MONGODB_URI, MONGODB_DB_NAME
+from backend.models.state import UserProfile, Goal, LogEntry, ConceptDict
 
 
-class FirestoreClientSimulator:
+# Helper functions for MongoDB _id conversion
+def serialize_object_id(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts ObjectId in a dictionary to string for JSON serialization."""
+    if "_id" in obj and isinstance(obj["_id"], ObjectId):
+        obj["_id"] = str(obj["_id"])
+    return obj
+
+def deserialize_object_id(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts string _id back to ObjectId for MongoDB queries."""
+    if "_id" in obj and isinstance(obj["_id"], str):
+        obj["_id"] = ObjectId(obj["_id"])
+    return obj
+
+
+class MongoDBService:
     """
-    Simulates Firestore operations for development and testing.
-    Stores data in memory without requiring Firebase credentials.
+    Service for MongoDB interactions.
+    Handles CRUD operations for ALIS data models.
     """
-    
+
     def __init__(self):
-        print("Firestore Simulator: Initialized.")
-        self.data: Dict[str, Any] = {}
-    
-    def collection(self, path: str) -> Dict[str, Any]:
+        self.client: Optional[MongoClient] = None
+        self.db: Optional[Any] = None
+        self._connect()
+
+    def _connect(self):
+        """Establishes connection to MongoDB."""
+        try:
+            self.client = MongoClient(MONGODB_URI)
+            # The ismaster command is cheap and does not require auth.
+            self.client.admin.command('ismaster') 
+            self.db = self.client[MONGODB_DB_NAME]
+            print(f"Successfully connected to MongoDB: {MONGODB_URI} (DB: {MONGODB_DB_NAME})")
+        except ConnectionFailure as e:
+            print(f"ERROR: Could not connect to MongoDB at {MONGODB_URI}. Please ensure MongoDB is running and accessible. {e}")
+            self.client = None
+            self.db = None
+        except Exception as e:
+            print(f"An unexpected error occurred during MongoDB connection: {e}")
+            self.client = None
+            self.db = None
+
+    def _get_collection(self, collection_name: str):
+        """Helper to get a collection, reconnecting if necessary."""
+        if self.db is None: # Changed from 'if not self.db:'
+            print("MongoDB connection lost or not established, attempting to reconnect...")
+            self._connect()
+            if self.db is None: # Changed from 'if not self.db:'
+                raise ConnectionFailure("MongoDB connection not established after reconnect attempt.")
+        return self.db[collection_name]
+
+    def save_user_profile(self, user_id: str, profile: UserProfile) -> None:
+        """Saves or updates a user profile."""
+        collection = self._get_collection("user_profiles")
+        try:
+            profile_data = profile.copy()
+            # Ensure _id is handled if present, typically user_id is natural _id
+            profile_data["_id"] = user_id
+            collection.replace_one({"_id": user_id}, profile_data, upsert=True)
+            print(f"UserProfile for {user_id} saved/updated.")
+        except PyMongoError as e:
+            print(f"Error saving UserProfile for {user_id}: {e}")
+            raise
+
+    def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
+        """Retrieves a user profile."""
+        collection = self._get_collection("user_profiles")
+        try:
+            profile = collection.find_one({"_id": user_id})
+            if profile:
+                return UserProfile(**serialize_object_id(profile))
+            return None
+        except PyMongoError as e:
+            print(f"Error retrieving UserProfile for {user_id}: {e}")
+            raise
+
+    def save_goal(self, goal_id: str, goal: Goal) -> None:
+        """Saves or updates a learning goal."""
+        collection = self._get_collection("goals")
+        try:
+            goal_data = goal.copy()
+            goal_data["_id"] = goal_id
+            collection.replace_one({"_id": goal_id}, goal_data, upsert=True)
+            print(f"Goal {goal_id} saved/updated.")
+        except PyMongoError as e:
+            print(f"Error saving Goal {goal_id}: {e}")
+            raise
+
+    def get_goal(self, goal_id: str) -> Optional[Goal]:
+        """Retrieves a learning goal."""
+        collection = self._get_collection("goals")
+        try:
+            goal = collection.find_one({"_id": goal_id})
+            if goal:
+                return Goal(**serialize_object_id(goal))
+            return None
+        except PyMongoError as e:
+            print(f"Error retrieving Goal {goal_id}: {e}")
+            raise
+
+    def save_log_entry(self, log_entry: LogEntry) -> None:
+        """Saves a log entry."""
+        collection = self._get_collection("logs")
+        try:
+            # MongoDB will generate an _id if not provided
+            collection.insert_one(log_entry.copy())
+            print(f"Log entry saved: {log_entry.get('eventType')}")
+        except PyMongoError as e:
+            print(f"Error saving LogEntry: {e}")
+            raise
+
+    def update_concept_status(self, goal_id: str, concept_id: str, new_status: str) -> None:
         """
-        Get or create a collection at the specified path.
-        
-        Args:
-            path: Collection path (e.g., 'goals', 'users')
-            
-        Returns:
-            Dictionary representing the collection
+        Updates the status of a specific concept within a goal's path_structure.
+        This assumes path_structure is part of the Goal document.
         """
-        if path not in self.data:
-            self.data[path] = {}
-        return self.data[path]
-    
-    def document(self, collection_path: str, doc_id: str) -> Dict[str, Any]:
-        """
-        Get a document from a collection.
-        
-        Args:
-            collection_path: Path to the collection
-            doc_id: Document identifier
-            
-        Returns:
-            Document data or empty dict if not found
-        """
-        collection = self.collection(collection_path)
-        return collection.get(doc_id, {})
-    
-    def set(self, collection_path: str, doc_id: str, data: Dict[str, Any], merge: bool = False) -> None:
-        """
-        Set or update a document in a collection.
-        
-        Args:
-            collection_path: Path to the collection
-            doc_id: Document identifier
-            data: Data to store
-            merge: If True, merge with existing data; if False, replace
-        """
-        collection = self.collection(collection_path)
-        
-        if merge and doc_id in collection:
-            collection[doc_id].update(data)
-        else:
-            collection[doc_id] = data
-        
-        print(f"Firestore Simulator: Document '{doc_id}' in '{collection_path}' updated.")
-    
-    def get_all(self, collection_path: str) -> Dict[str, Any]:
-        """
-        Get all documents in a collection.
-        
-        Args:
-            collection_path: Path to the collection
-            
-        Returns:
-            Dictionary of all documents in the collection
-        """
-        return self.collection(collection_path)
-    
-    def delete(self, collection_path: str, doc_id: str) -> None:
-        """
-        Delete a document from a collection.
-        
-        Args:
-            collection_path: Path to the collection
-            doc_id: Document identifier
-        """
-        collection = self.collection(collection_path)
-        if doc_id in collection:
-            del collection[doc_id]
-            print(f"Firestore Simulator: Document '{doc_id}' deleted from '{collection_path}'.")
+        collection = self._get_collection("goals")
+        try:
+            result = collection.update_one(
+                {"_id": goal_id, "path_structure.id": concept_id},
+                {"$set": {"path_structure.$.status": new_status}}
+            )
+            if result.matched_count == 0:
+                print(f"Warning: Concept {concept_id} not found in Goal {goal_id}'s path_structure for status update.")
+            else:
+                print(f"Concept {concept_id} status updated to {new_status} in Goal {goal_id}.")
+        except PyMongoError as e:
+            print(f"Error updating concept status for {concept_id} in Goal {goal_id}: {e}")
+            raise
+
+    def close_connection(self):
+        """Closes the MongoDB connection."""
+        if self.client:
+            self.client.close()
+            print("MongoDB connection closed.")
 
 
-class FirestoreService:
-    """
-    Wrapper service for Firestore operations.
-    Automatically uses simulator or real client based on configuration.
-    """
-    
-    def __init__(self, use_simulator: bool = True):
-        """
-        Initialize Firestore service.
-        
-        Args:
-            use_simulator: If True, use simulator; if False, use real Firestore client
-        """
-        self.use_simulator = use_simulator
-        
-        if use_simulator:
-            self.client = FirestoreClientSimulator()
-        else:
-            # Real Firestore initialization
-            try:
-                from google.cloud import firestore
-                from firebase_admin import credentials, initialize_app
-                from backend.config.settings import FIREBASE_CREDENTIALS_PATH
-                
-                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-                initialize_app(cred)
-                self.client = firestore.client()
-                print("Firestore: Real client initialized.")
-            except Exception as e:
-                print(f"Firestore: Failed to initialize real client: {e}")
-                print("Firestore: Falling back to simulator.")
-                self.client = FirestoreClientSimulator()
-                self.use_simulator = True
-    
-    def save_goal(self, goal_id: str, goal_data: Dict[str, Any]) -> None:
-        """Save a learning goal to the database."""
-        if self.use_simulator:
-            self.client.set("goals", goal_id, goal_data)
-        else:
-            self.client.collection("goals").document(goal_id).set(goal_data)
-    
-    def get_goal(self, goal_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a learning goal from the database."""
-        if self.use_simulator:
-            return self.client.document("goals", goal_id)
-        else:
-            doc = self.client.collection("goals").document(goal_id).get()
-            return doc.to_dict() if doc.exists else None
-    
-    def save_path(self, goal_id: str, path_structure: list) -> None:
-        """Save a learning path structure."""
-        if self.use_simulator:
-            self.client.set(f"goals/{goal_id}/path", "structure", {"concepts": path_structure})
-        else:
-            self.client.collection("goals").document(goal_id).collection("path").document("structure").set({
-                "concepts": path_structure
-            })
-    
-    def update_concept_status(self, goal_id: str, concept_id: str, status: str) -> None:
-        """Update the status of a specific concept."""
-        if self.use_simulator:
-            path_data = self.client.document(f"goals/{goal_id}/path", "structure")
-            if path_data and "concepts" in path_data:
-                for concept in path_data["concepts"]:
-                    if concept.get("id") == concept_id:
-                        concept["status"] = status
-                self.client.set(f"goals/{goal_id}/path", "structure", path_data, merge=True)
-        else:
-            # Real Firestore update logic
-            pass
+# Global instance for easy access
+db_service = MongoDBService()
 
 
-# Global instance
-db_service: Optional[FirestoreService] = None
-
-
-def get_db_service(use_simulator: bool = True) -> FirestoreService:
-    """
-    Get or create the global database service instance.
-    
-    Args:
-        use_simulator: Whether to use the simulator
-        
-    Returns:
-        FirestoreService instance
-    """
-    global db_service
-    if db_service is None:
-        db_service = FirestoreService(use_simulator=use_simulator)
+def get_db_service() -> MongoDBService:
+    """Returns the global MongoDBService instance."""
     return db_service

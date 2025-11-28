@@ -14,9 +14,9 @@ GEMINI_API_URL = os.getenv(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
 )
 
-# Firebase/Firestore Configuration
-FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
-USE_FIRESTORE_SIMULATOR = os.getenv("USE_FIRESTORE_SIMULATOR", "true").lower() == "true"
+# MongoDB Configuration
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "alis_db")
 
 # Server Configuration
 HOST = os.getenv("HOST", "0.0.0.0")

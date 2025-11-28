@@ -3,12 +3,13 @@ from datetime import datetime
 from typing import Optional, List
 from backend.models.state import LogEntry
 import os
+from backend.services.db_service import get_db_service # Import db_service
 
 class LoggingService:
     """
     Service for handling logging operations within the ALIS system.
-    It prints log entries to the console and can optionally write them to a file.
-    In the future, this will interact with Firestore or another persistence layer.
+    It prints log entries to the console, can optionally write them to a file,
+    and now stores them persistently in MongoDB.
     """
 
     def __init__(self, log_file_path: Optional[str] = None):
@@ -16,13 +17,14 @@ class LoggingService:
         self.log_file = None
         if self.log_file_path:
             try:
-                # Ensure the directory exists
                 os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
                 self.log_file = open(log_file_path, 'a', encoding='utf-8')
                 print(f"Logging to file: {log_file_path}")
             except IOError as e:
                 print(f"Warning: Could not open log file {log_file_path}: {e}")
                 self.log_file = None
+        
+        self.db = get_db_service() # Get the MongoDB service instance
 
     def create_log_entry(
         self,
@@ -69,12 +71,19 @@ class LoggingService:
             
         print(f"ALIS Log: {log_entry}")
         
+        # Write to file if configured
         if self.log_file:
             try:
                 self.log_file.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
-                self.log_file.flush() # Ensure it's written to disk immediately
+                self.log_file.flush()
             except IOError as e:
                 print(f"Warning: Could not write to log file: {e}")
+
+        # Save to MongoDB
+        try:
+            self.db.save_log_entry(log_entry)
+        except Exception as e:
+            print(f"Warning: Could not save log entry to MongoDB: {e}")
 
         return log_entry
 
