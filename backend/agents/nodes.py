@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 from bson.objectid import ObjectId
 
 from backend.models.state import ALISState, Goal, UserProfile, ConceptDict
-from backend.agents.prompts import ARCHITECT_PROMPT, CURATOR_PROMPT, TUTOR_PROMPT, ASSESSOR_PROMPT
+from backend.agents.prompts import ARCHITECT_PROMPT, CURATOR_PROMPT, TUTOR_PROMPT, ASSESSOR_PROMPT, add_language_instruction
 from backend.services.llm_service import get_llm_service
 from backend.services.db_service import get_db_service
 from backend.services.logging_service import logging_service
@@ -47,13 +47,18 @@ def create_goal_path(state: ALISState) -> ALISState:
     db = get_db_service()
 
     user_id = state['user_id']
+    language = state.get('language', 'de')
+    
     user_prompt = (
         f"[ACTION: CREATE_GOAL_PATH] "
         f"Create a SMART learning goal contract and the initial learning path "
         f"for the following goal: '{state['user_input']}'. "
         f"ALWAYS respond in JSON format with the keys 'goal_contract' and 'path_structure'."
     )
-    llm_result = llm.call(ARCHITECT_PROMPT, user_prompt, use_grounding=True)
+    
+    # Use language-aware system prompt
+    system_prompt = add_language_instruction(ARCHITECT_PROMPT, language)
+    llm_result = llm.call(system_prompt, user_prompt, use_grounding=True)
     
     state['llm_output'] = extract_json_from_markdown(llm_result)
     
@@ -123,6 +128,7 @@ def generate_material(state: ALISState) -> ALISState:
     
     concept_name = state['current_concept']['name']
     user_profile = state.get('user_profile', {})
+    language = state.get('language', 'de')
     
     user_prompt = (
         f"[ACTION: GENERATE_MATERIAL] "
@@ -134,7 +140,10 @@ def generate_material(state: ALISState) -> ALISState:
     if state.get('test_evaluation_result') and not state['test_evaluation_result'].get('passed', True):
         feedback = state['test_evaluation_result'].get('feedback', '')
         user_prompt += f"The user previously failed a test on this concept. Feedback was: '{feedback}'. Please adapt the material to address these gaps."
-    llm_result = llm.call(CURATOR_PROMPT, user_prompt, use_grounding=True)
+    
+    # Use language-aware system prompt
+    system_prompt = add_language_instruction(CURATOR_PROMPT, language)
+    llm_result = llm.call(system_prompt, user_prompt, use_grounding=True)
     state['llm_output'] = llm_result
     
     if state.get('goal_id') and state.get('current_concept'):
@@ -234,6 +243,8 @@ def process_chat(state: ALISState) -> ALISState:
     
     current_topic = state['current_concept'].get('name', 'the current topic')
     user_input = state['user_input']
+    language = state.get('language', 'de')
+    
     user_prompt = (
         f"[ACTION: CHAT_WITH_TUTOR] "
         f"The user asks: '{user_input}'. "
@@ -241,7 +252,9 @@ def process_chat(state: ALISState) -> ALISState:
         f"React affectively and helpfully. Also, identify the user's emotion (Frustration, Confusion, Joy, Neutral)."
     )
     
-    llm_result = llm.call(TUTOR_PROMPT, user_prompt)
+    # Use language-aware system prompt
+    system_prompt = add_language_instruction(TUTOR_PROMPT, language)
+    llm_result = llm.call(system_prompt, user_prompt)
     state['llm_output'] = llm_result
     
     emotion_feedback_match = re.search(r"Emotion:\s*(Frustration|Confusion|Joy|Neutral)", llm_result, re.IGNORECASE)
@@ -266,6 +279,8 @@ def generate_test(state: ALISState) -> ALISState:
     concept_name = state['current_concept']['name']
     required_level = state['current_concept'].get('requiredBloomLevel', 3)
     user_profile = state.get('user_profile', {})
+    language = state.get('language', 'de')
+    
     user_prompt = (
         f"[ACTION: GENERATE_TEST] "
         f"Generate a test for the concept: '{concept_name}'. "
@@ -274,7 +289,9 @@ def generate_test(state: ALISState) -> ALISState:
         f"ALWAYS respond in JSON format with a 'test_questions' array."
     )
     
-    llm_result = llm.call(CURATOR_PROMPT, user_prompt)
+    # Use language-aware system prompt
+    system_prompt = add_language_instruction(CURATOR_PROMPT, language)
+    llm_result = llm.call(system_prompt, user_prompt)
     state['llm_output'] = extract_json_from_markdown(llm_result)
     
     logging_service.create_log_entry(
@@ -312,6 +329,8 @@ def evaluate_test(state: ALISState) -> ALISState:
         state['test_evaluation_result'] = {"passed": False, "score": 0, "feedback": "Error during test evaluation.", "recommendation": "Repeat the concept."}
         return state
 
+    language = state.get('language', 'de')
+
     evaluation_prompt = (
         f"[ACTION: EVALUATE_TEST] "
         f"Evaluate the user's answers for the test questions on the concept '{current_concept.get('name')}'.\n"
@@ -325,7 +344,9 @@ def evaluate_test(state: ALISState) -> ALISState:
         f"ALWAYS respond in JSON format with keys: 'score', 'passed', 'feedback', 'recommendation', 'question_results' (list of {{id, correct, explanation}})."
     )
     
-    llm_evaluation_result = llm.call(CURATOR_PROMPT, evaluation_prompt)
+    # Use language-aware system prompt
+    system_prompt = add_language_instruction(CURATOR_PROMPT, language)
+    llm_evaluation_result = llm.call(system_prompt, evaluation_prompt)
     
     try:
         eval_data = json.loads(extract_json_from_markdown(llm_evaluation_result))

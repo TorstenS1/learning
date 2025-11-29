@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
 import json
+import os
 from typing import Dict, Any
 
 from backend.config.settings import HOST, PORT, DEBUG, CORS_ORIGINS
@@ -28,7 +29,9 @@ CORS(app, resources={
 })
 
 # Initialize services
-llm_service = get_llm_service(use_simulation=False)
+# Read USE_LLM_SIMULATION from environment variable (default: False)
+use_simulation = os.getenv('USE_LLM_SIMULATION', 'false').lower() in ('true', '1', 'yes')
+llm_service = get_llm_service(use_simulation=use_simulation)
 db_service = get_db_service()
 workflow = get_workflow()
 
@@ -43,6 +46,9 @@ def create_initial_state(payload: Dict[str, Any]) -> ALISState:
     Returns:
         ALISState dictionary
     """
+    language = payload.get('language', 'de')
+    print(f"DEBUG: Received language: {language}")
+    
     return ALISState(
         user_id=payload.get('userId', 'anonymous_user'),
         goal_id=payload.get('goalId', None),
@@ -51,7 +57,7 @@ def create_initial_state(payload: Dict[str, Any]) -> ALISState:
         llm_output="",
         user_input=payload.get('userInput', ''),
         remediation_needed=payload.get('remediationNeeded', False),
-        language=payload.get('language', 'de'),  # Extract language from payload
+        language=language,
         next_step=payload.get('nextStep', 'P1_P3_Goal_Path_Creation'),  # Routing parameter
         user_profile=payload.get('userProfile', {
             'stylePreference': 'Analogien-basiert',

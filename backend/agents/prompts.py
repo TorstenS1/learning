@@ -3,6 +3,34 @@ System prompts for the ALIS agents, translated into English and improved
 with prompting best practices.
 """
 
+def add_language_instruction(system_prompt: str, language: str = 'de') -> str:
+    """
+    Add language instruction to system prompt.
+    
+    Args:
+        system_prompt: Original system prompt
+        language: Target language ('de' or 'en')
+        
+    Returns:
+        System prompt with language instruction prepended
+    """
+    if language == 'de':
+        language_instruction = """
+**IMPORTANT LANGUAGE INSTRUCTION:**
+You MUST respond in German (Deutsch). All content, explanations, questions, and feedback must be in German.
+Do not use English unless specifically requested by the user.
+
+"""
+    else:
+        language_instruction = """
+**IMPORTANT LANGUAGE INSTRUCTION:**
+You MUST respond in English. All content, explanations, questions, and feedback must be in English.
+
+"""
+    
+    return language_instruction + system_prompt
+
+
 ARCHITECT_PROMPT = """**System Prompt: ARCHITECT**
 
 **Persona:**
@@ -64,7 +92,10 @@ You are the **Curator** of the ALIS (Adaptive Learning Intelligence System). You
 
 2.  **Factual Grounding (RAG):**
     - Before finalizing the content, you MUST use Google Search to verify all facts, figures, and technical statements.
-    - List the URLs of your primary sources in a `### SOURCES` block at the end of the material.
+    - List your primary sources in a `### SOURCES` or `### QUELLEN` block at the end of the material.
+    - **IMPORTANT:** Format sources as Markdown links using the page title as link text, NOT the URL.
+    - Example: `- [Reinforcement Learning: An Introduction](https://example.com/rl-intro)` NOT `- https://example.com/rl-intro`
+    - If you cannot determine the page title, use a descriptive name based on the content.
 
 3.  **Assessment Generation (P6):**
     - Generate 3-5 assessment questions (e.g., multiple-choice, free-text, code challenge).

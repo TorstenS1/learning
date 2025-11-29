@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Zap, LayoutList, BookOpen, MessageCircle, AlertTriangle, ArrowRight, CheckCircle, XCircle, BrainCircuit } from 'lucide-react';
+import { BookOpen, CheckCircle, AlertTriangle, ArrowRight, MessageCircle, Zap, LayoutList, BrainCircuit, Loader2, Save, FolderOpen, Globe, XCircle } from 'lucide-react';
 import alisAPI from './services/alisAPI';
 import { getTranslations, getStoredLanguage } from './i18n';
+import MarkdownRenderer from './components/MarkdownRenderer';
 
 // ==============================================================================
 // 2. MAIN COMPONENT
@@ -74,7 +75,7 @@ const App = () => {
                         updateState({ parsedTestQuestions: questions });
                         const initialAnswers = {};
                         questions.forEach((q, index) => {
-                            initialAnswers[q.id || `q${index}`] = q.type === 'multiple_choice' ? '' : '';
+                            initialAnswers[q.id || `q${index} `] = q.type === 'multiple_choice' ? '' : '';
                         });
                         updateState({ userTestAnswers: initialAnswers });
                     } else {
@@ -120,7 +121,7 @@ const App = () => {
                 setPhase('P3_PATH_REVIEW');
             }
         } catch (error) {
-            updateState({ loading: false, llmOutput: `Error contacting Architect: ${error.message}` });
+            updateState({ loading: false, llmOutput: `Error contacting Architect: ${error.message} ` });
         }
     };
 
@@ -138,7 +139,7 @@ const App = () => {
 
         updateState({ loading: true, llmOutput: 'Contacting Curator...' });
         try {
-            const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, firstOpenConcept, state.userProfile);
+            const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, firstOpenConcept, state.userProfile, language);
 
             updateState({
                 loading: false,
@@ -152,7 +153,7 @@ const App = () => {
                 setPhase('P7_GOAL_COMPLETE');
             }
         } catch (error) {
-            updateState({ loading: false, llmOutput: `Error fetching material: ${error.message}` });
+            updateState({ loading: false, llmOutput: `Error fetching material: ${error.message} ` });
         }
     };
 
@@ -167,7 +168,7 @@ const App = () => {
                 tutorChat: [...state.tutorChat, { sender: 'Tutor', message: result.data.llm_output }],
             });
         } catch (error) {
-            updateState({ loading: false, llmOutput: `Error during diagnosis: ${error.message}` });
+            updateState({ loading: false, llmOutput: `Error during diagnosis: ${error.message} ` });
         }
     };
 
@@ -182,7 +183,7 @@ const App = () => {
         try {
             if (state.remediationNeeded) {
                 const remediationResult = await alisAPI.performRemediation(state.userId, state.goalId, userInput, state.pathStructure, state.currentConcept);
-                const materialResult = await alisAPI.getMaterial(state.userId, state.goalId, remediationResult.data.path_structure, remediationResult.data.current_concept, state.userProfile);
+                const materialResult = await alisAPI.getMaterial(state.userId, state.goalId, remediationResult.data.path_structure, remediationResult.data.current_concept, state.userProfile, language);
                 updateState({
                     loading: false,
                     llmOutput: materialResult.data.llm_output,
@@ -193,7 +194,7 @@ const App = () => {
                 });
                 setPhase('P5_LEARNING');
             } else {
-                const chatResult = await alisAPI.chat(state.userId, state.goalId, userInput, state.currentConcept);
+                const chatResult = await alisAPI.chat(state.userId, state.goalId, userInput, state.currentConcept, language);
                 updateState({
                     loading: false,
                     llmOutput: state.llmOutput,
@@ -201,7 +202,7 @@ const App = () => {
                 });
             }
         } catch (error) {
-            updateState({ loading: false, tutorChat: [...newChat, { sender: 'System', message: `Error: ${error.message}` }] });
+            updateState({ loading: false, tutorChat: [...newChat, { sender: 'System', message: `Error: ${error.message} ` }] });
         }
     };
 
@@ -212,11 +213,11 @@ const App = () => {
         }
         updateState({ loading: true, llmOutput: 'Generating test... Contacting Curator...' });
         try {
-            const result = await alisAPI.generateTest(state.userId, state.goalId, state.currentConcept, state.userProfile);
+            const result = await alisAPI.generateTest(state.userId, state.goalId, state.currentConcept, state.userProfile, language);
             updateState({ loading: false, llmOutput: result.data.llm_output });
             setPhase('P6_TEST_PHASE');
         } catch (error) {
-            updateState({ loading: false, llmOutput: `Error generating test: ${error.message}` });
+            updateState({ loading: false, llmOutput: `Error generating test: ${error.message} ` });
         }
     };
 
@@ -225,10 +226,10 @@ const App = () => {
             updateState({ llmOutput: 'Error: No test questions or active concept to evaluate.' });
             return;
         }
-        updateState({ loading: true, llmOutput: `{ "test_questions": ${JSON.stringify(state.parsedTestQuestions)} }` });
+        updateState({ loading: true, llmOutput: `{ "test_questions": ${JSON.stringify(state.parsedTestQuestions)} } ` });
         try {
             console.log('🚀 Submitting test...');
-            const result = await alisAPI.submitTest(state.userId, state.goalId, state.currentConcept, state.parsedTestQuestions, state.userTestAnswers, state.pathStructure);
+            const result = await alisAPI.submitTest(state.userId, state.goalId, state.currentConcept, state.parsedTestQuestions, state.userTestAnswers, state.pathStructure, language);
             console.log('✅ Test result received:', result);
 
             updateState({
@@ -257,7 +258,7 @@ const App = () => {
             }
         } catch (error) {
             console.error('❌ Error evaluating test:', error);
-            updateState({ loading: false, llmOutput: `Error evaluating test: ${error.message}` });
+            updateState({ loading: false, llmOutput: `Error evaluating test: ${error.message} ` });
         }
     };
 
@@ -378,9 +379,9 @@ const App = () => {
                 let message = t.session?.selectPrompt || 'Select a session to load:\n\n';
                 sessions.forEach((session, index) => {
                     const date = new Date(session.timestamp).toLocaleString();
-                    message += `${index + 1}. ${session.session_name || session.goal_name}\n`;
-                    message += `   Phase: ${session.phase} | ${date}\n`;
-                    message += `   Current: ${session.current_concept}\n\n`;
+                    message += `${index + 1}. ${session.session_name || session.goal_name} \n`;
+                    message += `   Phase: ${session.phase} | ${date} \n`;
+                    message += `   Current: ${session.current_concept} \n\n`;
                 });
 
                 const choice = prompt(message + (t.session?.enterNumber || 'Enter number (1-' + sessions.length + '):'));
@@ -445,7 +446,7 @@ const App = () => {
                     <BookOpen className="mr-2" /> Learning Phase: {state.currentConcept?.name}
                 </h2>
                 <div className="p-6 bg-gray-50 text-gray-800 border border-gray-200 rounded-xl shadow-inner min-h-[300px]">
-                    {state.loading ? <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-indigo-500" /></div> : <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: state.llmOutput.replace(/\n/g, '<br/>') }} />}
+                    {state.loading ? <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-indigo-500" /></div> : <MarkdownRenderer content={state.llmOutput} />}
                 </div>
                 <div className="mt-6 flex justify-between items-center">
                     <button onClick={triggerRemediation} className="flex items-center px-4 py-2 bg-red-100 text-red-700 border border-red-300 rounded-full hover:bg-red-200 transition duration-150 shadow-md">
@@ -464,7 +465,10 @@ const App = () => {
                 <div className="flex-grow overflow-y-auto space-y-3 p-2 bg-white rounded-lg shadow-inner mb-4">
                     {state.tutorChat.map((chat, index) => (
                         <div key={index} className={`max-w-[90%] p-2 rounded-lg text-sm ${chat.sender === 'User' ? 'ml-auto bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-800'}`}>
-                            <strong>{chat.sender}:</strong> {chat.message}
+                            <strong>{chat.sender}:</strong>
+                            <div className="mt-1">
+                                <MarkdownRenderer content={chat.message} className="prose-sm leading-normal" />
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -552,10 +556,10 @@ const App = () => {
                 </p>
                 <ul className="space-y-3 mb-8">
                     {state.pathStructure.map((concept, index) => (
-                        <li key={concept.id} className={`flex items-center justify-between p-4 rounded-lg transition duration-150 ${concept.status === 'Active' ? 'bg-indigo-100 border-l-4 border-indigo-600 font-semibold' :
+                        <li key={concept.id} className={`flex items - center justify - between p - 4 rounded - lg transition duration - 150 ${concept.status === 'Active' ? 'bg-indigo-100 border-l-4 border-indigo-600 font-semibold' :
                             concept.status === 'Skipped' || concept.status === 'Mastered' ? 'bg-green-50 line-through text-gray-500' :
                                 'bg-gray-50 border border-gray-200 text-gray-700'
-                            }`}>
+                            } `}>
                             <span className="flex items-center">
                                 {index + 1}. {concept.name}
                                 {(concept.status === 'Skipped' || concept.status === 'Mastered') && <span className="ml-2 text-xs font-bold text-green-700">({concept.status}: {concept.expertiseSource || 'Test'})</span>}
@@ -596,19 +600,19 @@ const App = () => {
             {state.parsedTestQuestions.length > 0 ? (
                 <div className="space-y-6">
                     {state.parsedTestQuestions.map((q, qIndex) => (
-                        <div key={q.id || `q${qIndex}`} className="p-4 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg">
+                        <div key={q.id || `q${qIndex} `} className="p-4 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg">
                             <p className="font-semibold text-gray-800 mb-2">{qIndex + 1}. {q.question_text}</p>
                             {q.type === 'multiple_choice' ? (
                                 <div className="space-y-2 ml-4">
                                     {q.options && q.options.map((option, oIndex) => (
                                         <label key={oIndex} className="flex items-center">
-                                            <input type="radio" name={`question - ${q.id || `q${qIndex}`}`} value={option} checked={state.userTestAnswers[q.id || `q${qIndex}`] === option} onChange={(e) => handleAnswerChange(q.id || `q${qIndex}`, e.target.value)} className="form-radio text-indigo-600 h-4 w-4" />
+                                            <input type="radio" name={`question - ${q.id || `q${qIndex}`} `} value={option} checked={state.userTestAnswers[q.id || `q${qIndex} `] === option} onChange={(e) => handleAnswerChange(q.id || `q${qIndex} `, e.target.value)} className="form-radio text-indigo-600 h-4 w-4" />
                                             <span className="ml-2">{option}</span>
                                         </label>
                                     ))}
                                 </div>
                             ) : (
-                                <textarea className="w-full p-3 mt-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[80px] text-gray-900 bg-white" placeholder="Your answer..." value={state.userTestAnswers[q.id || `q${qIndex}`] || ''} onChange={(e) => handleAnswerChange(q.id || `q${qIndex}`, e.target.value)} />
+                                <textarea className="w-full p-3 mt-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[80px] text-gray-900 bg-white" placeholder="Your answer..." value={state.userTestAnswers[q.id || `q${qIndex} `] || ''} onChange={(e) => handleAnswerChange(q.id || `q${qIndex} `, e.target.value)} />
                             )}
                         </div>
                     ))}
@@ -634,7 +638,7 @@ const App = () => {
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Detailed Evaluation:</h3>
                 <div className="space-y-4">
                     {state.testEvaluationResult.question_results.map((result, index) => (
-                        <div key={index} className={`p-4 rounded-lg border ${result.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                        <div key={index} className={`p - 4 rounded - lg border ${result.is_correct ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} `}>
                             <div className="flex items-start">
                                 <div className="flex-shrink-0 mt-1">{result.is_correct ? <CheckCircle className="w-5 h-5 text-green-600" /> : <XCircle className="w-5 h-5 text-red-600" />}</div>
                                 <div className="ml-3">
@@ -672,16 +676,16 @@ const App = () => {
                     }
                     updateState({ loading: true, llmOutput: 'Curator is generating material for the next concept...' });
                     try {
-                        const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile);
+                        const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile, language);
                         updateState({
                             loading: false,
                             llmOutput: result.data.llm_output,
-                            tutorChat: [{ sender: 'System', message: `Welcome to the concept: ${nextConcept.name}!` }],
+                            tutorChat: [{ sender: 'System', message: `Welcome to the concept: ${nextConcept.name} !` }],
                             testEvaluationResult: null
                         });
                         setPhase('P5_LEARNING');
                     } catch (error) {
-                        updateState({ loading: false, llmOutput: `Error: ${error.message}` });
+                        updateState({ loading: false, llmOutput: `Error: ${error.message} ` });
                     }
                 }} className="w-full flex items-center justify-center p-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150" disabled={state.loading}>
                     {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <ArrowRight className="mr-2 w-5 h-5" />}
@@ -744,7 +748,7 @@ const App = () => {
                     <button onClick={async () => {
                         updateState({ loading: true, llmOutput: 'Reloading material...' });
                         try {
-                            const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, state.currentConcept, state.userProfile);
+                            const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, state.currentConcept, state.userProfile, language);
                             updateState({
                                 loading: false,
                                 llmOutput: result.data.llm_output,
@@ -753,7 +757,7 @@ const App = () => {
                             });
                             setPhase('P5_LEARNING');
                         } catch (error) {
-                            updateState({ loading: false, llmOutput: `Error: ${error.message}` });
+                            updateState({ loading: false, llmOutput: `Error: ${error.message} ` });
                         }
                     }} className="w-full flex items-center justify-center p-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150" disabled={state.loading}>
                         {state.loading ? <Loader2 className="mr-2 w-5 h-5 animate-spin" /> : <BookOpen className="mr-2 w-5 h-5" />}
@@ -778,17 +782,17 @@ const App = () => {
                             if (nextConcept) {
                                 updateState({ loading: true, llmOutput: 'Skipping concept... Generating material for next concept...' });
                                 try {
-                                    const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile);
+                                    const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile, language);
                                     updateState({
                                         loading: false,
                                         llmOutput: result.data.llm_output,
                                         currentConcept: nextConcept,
-                                        tutorChat: [{ sender: 'System', message: `Concept skipped. Welcome to: ${nextConcept.name}!` }],
+                                        tutorChat: [{ sender: 'System', message: `Concept skipped.Welcome to: ${nextConcept.name} !` }],
                                         testEvaluationResult: null
                                     });
                                     setPhase('P5_LEARNING');
                                 } catch (error) {
-                                    updateState({ loading: false, llmOutput: `Error: ${error.message}` });
+                                    updateState({ loading: false, llmOutput: `Error: ${error.message} ` });
                                 }
                             } else {
                                 setPhase('P7_GOAL_COMPLETE');
