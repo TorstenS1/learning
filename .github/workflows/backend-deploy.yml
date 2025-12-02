@@ -1,0 +1,76 @@
+name: Deploy Backend to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'requirements.txt'
+      - 'startup.sh'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: app-alis-backend-${{ secrets.UNIQUE_ID }}
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create deployment package
+      run: |
+        # Create a zip with all necessary files
+        zip -r deploy.zip . \
+          -x "*.git*" \
+          -x "*frontend/*" \
+          -x "*logs/*" \
+          -x "*venv/*" \
+          -x "*.venv/*" \
+          -x "*__pycache__/*" \
+          -x "*.pytest_cache/*"
+    
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: deploy.zip
+    
+    - name: Wait for deployment
+      run: sleep 30
+    
+    - name: Health Check
+      run: |
+        echo "Checking backend health..."
+        HEALTH_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/health"
+        echo "URL: $HEALTH_URL"
+        
+        # Retry up to 5 times
+        for i in {1..5}; do
+          echo "Attempt $i/5..."
+          if curl -f -s "$HEALTH_URL" | jq '.status' | grep -q "healthy"; then
+            echo "✅ Backend is healthy!"
+            exit 0
+          fi
+          echo "Backend not ready yet, waiting..."
+          sleep 10
+        done
+        
+        echo "❌ Backend health check failed"
+        exit 1
