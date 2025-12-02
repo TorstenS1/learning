@@ -35,7 +35,8 @@ class MongoDBService:
     def _connect(self):
         """Establishes connection to MongoDB."""
         try:
-            self.client = MongoClient(MONGODB_URI)
+            # Set a short timeout (5s) to prevent hanging during startup if DB is unreachable
+            self.client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
             # The ismaster command is cheap and does not require auth.
             self.client.admin.command('ismaster') 
             self.db = self.client[MONGODB_DB_NAME]
