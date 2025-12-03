@@ -13,7 +13,7 @@ on:
 
 env:
   AZURE_WEBAPP_NAME: app-alis-backend-${{ secrets.UNIQUE_ID }}
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.12'
 
 jobs:
   build-and-deploy:
