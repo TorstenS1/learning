@@ -14,10 +14,6 @@ APP_SERVICE_PLAN="asp-alis-learning"
 BACKEND_APP_NAME="app-alis-backend-${UNIQUE_ID}"
 GITHUB_REPO="https://github.com/TorstenS1/learning"
 
-# Secrets
-GEMINI_API_KEY="AIzaSyCPjMYhSBmd06BwJPy4Q0eS_PYguMuPWNs"
-MONGO_URI="mongodb+srv://alis_app_user:alis_app_user@cluster0.n5e9osz.mongodb.net/?appName=Cluster0"
-
 echo ""
 echo "Configuration:"
 echo "  Resource Group: ${RESOURCE_GROUP}"
