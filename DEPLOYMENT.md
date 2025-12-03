@@ -44,8 +44,8 @@ This guide walks you through deploying the ALIS application to Azure using GitHu
    - Ensure you have admin access
 
 3. **Secrets Ready**
-   - Gemini API Key: `AIzaSyCPjMYhSBmd06BwJPy4Q0eS_PYguMuPWNs`
-   - MongoDB URI: `mongodb+srv://alis_app_user:alis_app_user@cluster0.n5e9osz.mongodb.net/?appName=Cluster0`
+   - Gemini API Key: `the_key`
+   - MongoDB URI: `mongodb+srv://alis_app_user:<alis_app_password>@cluster0.n5e9osz.mongodb.net/?appName=Cluster0`
 
 ## Step-by-Step Deployment
 
