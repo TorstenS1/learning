@@ -58,7 +58,6 @@ htmlcov/
 node_modules/
 .next/
 out/
-dist/
 .cache/
 
 # Build artifacts
@@ -66,3 +65,4 @@ dist/
 *.pyo
 learning/
 /frontend/package-lock.json
+/setup_infrastructure.sh
