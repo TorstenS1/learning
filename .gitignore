@@ -66,3 +66,4 @@ out/
 learning/
 /frontend/package-lock.json
 /setup_infrastructure.sh
+/deploy.sh
