@@ -2,20 +2,22 @@
 # Azure App Service startup script for ALIS Backend
 
 echo "Starting ALIS Backend..."
+cd /home/site/wwwroot
 
-# Install dependencies if needed
-if [ ! -d "/home/site/wwwroot/.venv" ]; then
-    echo "Creating virtual environment..."
-    python3.11 -m venv /home/site/wwwroot/.venv
+# Check if we're in the right directory
+echo "Current directory: $(pwd)"
+echo "Files in directory:"
+ls -la
+
+# Install dependencies
+if [ -f "requirements.txt" ]; then
+    echo "Installing dependencies from requirements.txt..."
+    pip install -r requirements.txt
+else
+    echo "ERROR: requirements.txt not found!"
+    exit 1
 fi
 
-echo "Activating virtual environment..."
-source /home/site/wwwroot/.venv/bin/activate
-
-echo "Installing dependencies..."
-pip install --upgrade pip
-pip install -r /home/site/wwwroot/requirements.txt
-
 echo "Starting Gunicorn..."
-cd /home/site/wwwroot
-gunicorn --bind=0.0.0.0:8000 --timeout 600 --workers 2 backend.app:app
+# Use app:app since backend.app:app requires backend to be a package
+gunicorn --bind=0.0.0.0:8000 --timeout 600 --workers 2 --chdir /home/site/wwwroot backend.app:app
