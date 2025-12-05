@@ -211,11 +211,22 @@ def perform_remediation(state: ALISState) -> ALISState:
         new_current_concept_data = parsed_result.get('new_current_concept', state['current_concept'])
 
         new_path = [ConceptDict(**c) for c in new_path_data]
-        new_current_concept = ConceptDict(**new_current_concept_data)
+        
+        # Handle case where new_current_concept might be a string ID instead of a dict
+        if isinstance(new_current_concept_data, str):
+            # Find the concept in the path by ID
+            new_current_concept = next((c for c in new_path if c.get('id') == new_current_concept_data), new_path[0] if new_path else state['current_concept'])
+        elif isinstance(new_current_concept_data, dict):
+            new_current_concept = ConceptDict(**new_current_concept_data)
+        else:
+            # Fallback to first concept in path
+            new_current_concept = new_path[0] if new_path else state['current_concept']
+            
         state['llm_output'] = llm_result
 
     except Exception as e:
         print(f"Error parsing LLM output in perform_remediation: {e}")
+        print(f"LLM result was: {llm_result[:500]}...")
         state['llm_output'] = f"Error during path surgery. Please try again. Details: {e}"
 
     state['path_structure'] = new_path

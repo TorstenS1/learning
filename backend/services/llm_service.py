@@ -159,9 +159,9 @@ class LLMService:
                 self._log_llm_call(request_data, response_data)
                 return response_text
                 
-            except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout) as e:
-                # Timeout error - retry
-                error_msg = f"Timeout error (attempt {attempt + 1}/{max_retries + 1}): {str(e)}"
+            except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as e:
+                # Network/Timeout error - retry
+                error_msg = f"Network/Timeout error (attempt {attempt + 1}/{max_retries + 1}): {str(e)}"
                 print(f"⚠️  {error_msg}")
                 
                 if attempt < max_retries:
@@ -174,6 +174,32 @@ class LLMService:
                     response_data = {'text': '', 'success': False}
                     self._log_llm_call(request_data, response_data, error=error_msg)
                     raise Exception(f"LLM API call failed after {max_retries + 1} attempts: {str(e)}")
+            
+            except requests.exceptions.HTTPError as e:
+                # HTTP error - retry for server errors (500, 502, 503, 504)
+                status_code = e.response.status_code if hasattr(e, 'response') and e.response else 0
+                
+                # Only retry for server errors (5xx), not client errors (4xx)
+                if status_code >= 500:
+                    error_msg = f"Server error {status_code} (attempt {attempt + 1}/{max_retries + 1}): {str(e)}"
+                    print(f"⚠️  {error_msg}")
+                    
+                    if attempt < max_retries:
+                        wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"🔄 Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        # Final attempt failed
+                        response_data = {'text': '', 'success': False}
+                        self._log_llm_call(request_data, response_data, error=error_msg)
+                        raise Exception(f"LLM API server error after {max_retries + 1} attempts: {str(e)}")
+                else:
+                    # Client error (4xx) - don't retry
+                    error_msg = f"Client error {status_code}: {str(e)}"
+                    response_data = {'text': '', 'success': False}
+                    self._log_llm_call(request_data, response_data, error=error_msg)
+                    raise
                     
             except (json.JSONDecodeError, KeyError, ValueError) as e:
                 # Format/parsing error - retry
