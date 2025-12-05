@@ -118,7 +118,7 @@ class LLMService:
         max_tokens: int = DEFAULT_MAX_TOKENS
     ) -> str:
         """
-        Make an LLM API call.
+        Make an LLM API call with retry logic.
         
         Args:
             system_prompt: System/role prompt defining agent behavior
@@ -130,6 +130,8 @@ class LLMService:
         Returns:
             LLM response text
         """
+        import time
+        
         request_data = {
             'system_prompt': system_prompt,
             'user_prompt': user_prompt,
@@ -138,28 +140,63 @@ class LLMService:
             'max_tokens': max_tokens
         }
         
-        try:
-            if self.use_simulation:
-                response_text = self._simulate_response(system_prompt, user_prompt)
-            else:
-                response_text = self._real_api_call(system_prompt, user_prompt, use_grounding, temperature, max_tokens)
-            
-            response_data = {
-                'text': response_text,
-                'success': True
-            }
-            
-            self._log_llm_call(request_data, response_data)
-            return response_text
-            
-        except Exception as e:
-            error_msg = str(e)
-            response_data = {
-                'text': '',
-                'success': False
-            }
-            self._log_llm_call(request_data, response_data, error=error_msg)
-            raise
+        max_retries = 2
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries + 1):
+            try:
+                if self.use_simulation:
+                    response_text = self._simulate_response(system_prompt, user_prompt)
+                else:
+                    response_text = self._real_api_call(system_prompt, user_prompt, use_grounding, temperature, max_tokens)
+                
+                response_data = {
+                    'text': response_text,
+                    'success': True,
+                    'attempt': attempt + 1
+                }
+                
+                self._log_llm_call(request_data, response_data)
+                return response_text
+                
+            except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout) as e:
+                # Timeout error - retry
+                error_msg = f"Timeout error (attempt {attempt + 1}/{max_retries + 1}): {str(e)}"
+                print(f"⚠️  {error_msg}")
+                
+                if attempt < max_retries:
+                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"🔄 Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Final attempt failed
+                    response_data = {'text': '', 'success': False}
+                    self._log_llm_call(request_data, response_data, error=error_msg)
+                    raise Exception(f"LLM API call failed after {max_retries + 1} attempts: {str(e)}")
+                    
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                # Format/parsing error - retry
+                error_msg = f"Response format error (attempt {attempt + 1}/{max_retries + 1}): {str(e)}"
+                print(f"⚠️  {error_msg}")
+                
+                if attempt < max_retries:
+                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"🔄 Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Final attempt failed
+                    response_data = {'text': '', 'success': False}
+                    self._log_llm_call(request_data, response_data, error=error_msg)
+                    raise Exception(f"LLM response format error after {max_retries + 1} attempts: {str(e)}")
+                    
+            except Exception as e:
+                # Other errors - don't retry, fail immediately
+                error_msg = f"Unexpected error: {str(e)}"
+                response_data = {'text': '', 'success': False}
+                self._log_llm_call(request_data, response_data, error=error_msg)
+                raise
     
     def _simulate_response(self, system_prompt: str, user_prompt: str) -> str:
         """
