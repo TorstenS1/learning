@@ -28,7 +28,7 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost
 
 # LLM Configuration
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
-DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "2048"))
+DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "131072"))
 
 # LLM Provider Configuration
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower() # 'gemini' or 'openai'

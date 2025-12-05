@@ -118,6 +118,67 @@ fi
 
 print_success "Configuration validated"
 
+################################################################################
+# STEP 0: TEST MONGODB CONNECTION
+################################################################################
+
+print_header "Step 0/10: Testing MongoDB Connection"
+
+# Create temporary python test script
+cat > test_mongo_connection.py << 'EOF'
+import os
+import sys
+import pymongo
+from pymongo.errors import ConnectionFailure, ConfigurationError
+
+def test_mongo_connection(uri):
+    print(f"Testing MongoDB connection...")
+    # Mask URI for security in logs
+    masked_uri = uri.split('@')[-1] if '@' in uri else '***'
+    print(f"Target: ...@{masked_uri}")
+
+    try:
+        # Set a short timeout (5s) to fail fast
+        client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000)
+        
+        # The ismaster command is cheap and does not require auth.
+        client.admin.command('ismaster')
+        
+        print("✅ Successfully connected to MongoDB!")
+        return True
+    except ConnectionFailure as e:
+        print(f"❌ Connection failed: {e}")
+        return False
+    except ConfigurationError as e:
+        print(f"❌ Configuration error: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return False
+
+if __name__ == "__main__":
+    uri = os.environ.get("MONGO_URI")
+    if not uri:
+        print("❌ MONGO_URI environment variable not set")
+        sys.exit(1)
+    
+    if test_mongo_connection(uri):
+        sys.exit(0)
+    else:
+        sys.exit(1)
+EOF
+
+# Run the test
+print_info "Running MongoDB connection test..."
+if python3 test_mongo_connection.py; then
+    print_success "MongoDB connection verified"
+    rm test_mongo_connection.py
+else
+    print_error "MongoDB connection failed. Please check your MONGO_URI."
+    rm test_mongo_connection.py
+    exit 1
+fi
+
 # Confirm before proceeding
 read -p "Do you want to proceed with deployment? (y/n) " -n 1 -r
 echo
