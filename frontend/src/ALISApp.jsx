@@ -776,26 +776,56 @@ const App = () => {
                     </button>
                     <button onClick={async () => {
                         if (confirm(t.p7.remediation.skipConcept + '?')) {
-                            // Mark as skipped and move to next
-                            const nextConcept = state.pathStructure.find((c, i) => i > state.pathStructure.findIndex(pc => pc.id === state.currentConcept.id) && (c.status === 'Open' || c.status === 'Reactivated'));
+                            updateState({ loading: true, llmOutput: 'Skipping concept...' });
+                            try {
+                                // Call API to skip concept and get next one
+                                const skipResult = await alisAPI.skipConcept(
+                                    state.userId,
+                                    state.goalId,
+                                    state.currentConcept,
+                                    state.pathStructure
+                                );
 
-                            if (nextConcept) {
-                                updateState({ loading: true, llmOutput: 'Skipping concept... Generating material for next concept...' });
-                                try {
-                                    const result = await alisAPI.getMaterial(state.userId, state.goalId, state.pathStructure, nextConcept, state.userProfile, language);
+                                const nextConcept = skipResult.data.next_concept;
+                                const updatedPath = skipResult.data.path_structure;
+
+                                updateState({
+                                    pathStructure: updatedPath
+                                });
+
+                                if (nextConcept) {
+                                    // Get material for next concept
+                                    const materialResult = await alisAPI.getMaterial(
+                                        state.userId,
+                                        state.goalId,
+                                        updatedPath,
+                                        nextConcept,
+                                        state.userProfile,
+                                        language
+                                    );
+
                                     updateState({
                                         loading: false,
-                                        llmOutput: result.data.llm_output,
+                                        llmOutput: materialResult.data.llm_output,
                                         currentConcept: nextConcept,
-                                        tutorChat: [{ sender: 'System', message: `Concept skipped.Welcome to: ${nextConcept.name} !` }],
+                                        tutorChat: [{ sender: 'System', message: `Concept skipped. Welcome to: ${nextConcept.name}!` }],
                                         testEvaluationResult: null
                                     });
                                     setPhase('P5_LEARNING');
-                                } catch (error) {
-                                    updateState({ loading: false, llmOutput: `Error: ${error.message} ` });
+                                } else {
+                                    // No more concepts, goal complete
+                                    updateState({
+                                        loading: false,
+                                        llmOutput: t.p7.goalComplete.description,
+                                        testEvaluationResult: null
+                                    });
+                                    setPhase('P7_GOAL_COMPLETE');
                                 }
-                            } else {
-                                setPhase('P7_GOAL_COMPLETE');
+                            } catch (error) {
+                                updateState({
+                                    loading: false,
+                                    llmOutput: `Error skipping concept: ${error.message}`
+                                });
                             }
                         }
                     }} className="w-full flex items-center justify-center p-4 bg-gray-500 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-600 transition duration-150">

@@ -485,6 +485,69 @@ def submit_test():
         }), 500
 
 
+
+
+@app.route('/api/skip_concept', methods=['POST'])
+def skip_concept_endpoint():
+    """
+    Skip the current concept and move to the next one.
+    
+    Request JSON:
+        - userId: User identifier
+        - goalId: Goal identifier
+        - currentConcept: Current concept to skip
+        - pathStructure: Current learning path
+        
+    Returns:
+        JSON with next concept and updated path structure
+    """
+    try:
+        payload = request.get_json()
+        goal_id = payload.get('goalId')
+        current_concept = payload.get('currentConcept', {})
+        path_structure = payload.get('pathStructure', [])
+        
+        if not goal_id or not current_concept:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing goalId or currentConcept'
+            }), 400
+        
+        # Mark current concept as Skipped in database
+        db = get_db_service()
+        db.update_concept_status(goal_id, current_concept['id'], 'Skipped')
+        
+        # Update path structure
+        for concept in path_structure:
+            if concept.get('id') == current_concept['id']:
+                concept['status'] = 'Skipped'
+                concept['expertiseSource'] = 'User Skip'
+                break
+        
+        # Find next open concept
+        current_index = next((i for i, c in enumerate(path_structure) if c.get('id') == current_concept['id']), -1)
+        next_concept = None
+        
+        if current_index != -1:
+            next_concept = next((c for c in path_structure[current_index + 1:] if c.get('status') in ['Open', 'Reactivated']), None)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'path_structure': path_structure,
+                'current_concept': next_concept,
+                'next_concept': next_concept
+            }
+        }), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error in skip_concept: {str(e)}\\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Internal server error: {str(e)}'
+        }), 500
+
+
 @app.route('/api/generate_prior_knowledge_test', methods=['POST'])
 def generate_prior_knowledge_test_endpoint():
     """

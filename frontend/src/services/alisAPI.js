@@ -182,6 +182,22 @@ export const alisAPI = {
     },
 
     /**
+     * Skip current concept and move to next
+     * @param {string} userId - User identifier
+     * @param {string} goalId - Goal identifier
+     * @param {object} currentConcept - Current concept to skip
+     * @param {array} pathStructure - Current learning path
+     */
+    async skipConcept(userId, goalId, currentConcept, pathStructure) {
+        return apiCall('/skip_concept', {
+            userId,
+            goalId,
+            currentConcept,
+            pathStructure
+        });
+    },
+
+    /**
      * P2: Generate prior knowledge test
      */
     async generatePriorKnowledgeTest(userId, goalId, pathStructure) {
