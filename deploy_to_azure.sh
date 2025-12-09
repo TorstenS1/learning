@@ -389,12 +389,11 @@ az webapp config appsettings set \
         SCM_DO_BUILD_DURING_DEPLOYMENT="true" \
     --output table
 
-# Remove startup file to let Azure auto-detect
-print_info "Removing custom startup file (using Azure auto-detection)..."
+print_info "Setting custom startup file..."
 az webapp config set \
     --name "${BACKEND_APP_NAME}" \
     --resource-group "${RESOURCE_GROUP}" \
-    --startup-file "" \
+    --startup-file "startup.sh" \
     --output table
 
 # Enable basic authentication for publishing
