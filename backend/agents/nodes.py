@@ -294,10 +294,13 @@ def generate_test(state: ALISState) -> ALISState:
     
     user_prompt = (
         f"[ACTION: GENERATE_TEST] "
-        f"Generate a test for the concept: '{concept_name}'. "
+        f"Generate a multiple-choice test for the concept: '{concept_name}'. "
+        f"The test must contain at least 8 questions. "
+        f"Each question must have 4 to 5 options. "
         f"Required Bloom Level: {required_level}. "
         f"User Profile: {json.dumps(user_profile, ensure_ascii=False)}. "
-        f"ALWAYS respond in JSON format with a 'test_questions' array."
+        f"ALWAYS respond in JSON format with a 'test_questions' array. "
+        f"Each question in the array should be an object with 'id', 'question_text', 'options' (an array of strings), and 'type' ('multiple-choice')."
     )
     
     # Use language-aware system prompt
@@ -421,9 +424,11 @@ def generate_prior_knowledge_test(state: ALISState) -> ALISState:
     
     prompt = (
         f"[ACTION: GENERATE_P2_TEST] "
-        f"Generate a pre-assessment test for the following learning path: {path_summary}. "
-        f"Create 3-5 questions to check which of these concepts the user has already mastered. "
-        f"Respond in JSON with a 'questions' array (id, question_text, type)."
+        f"Generate a multiple-choice pre-assessment test for the following learning path: {path_summary}. "
+        f"The test must contain at least 8 questions to check which of these concepts the user has already mastered. "
+        f"Each question must have 4 to 5 options. "
+        f"Respond in JSON with a 'questions' array. "
+        f"Each question in the array should be an object with 'id', 'question_text', 'options' (an array of strings), and 'type' ('multiple-choice')."
     )
     
     response = llm.call(ASSESSOR_PROMPT, prompt)
